@@ -6,6 +6,21 @@ Design deadly dungeons, draft powerful upgrades, and defend your Dungeon Lord ag
 
 ---
 
+## 🎯 CORE VISION
+
+Dungeon Lord is about building an evolving machine of death.
+
+The player should always have interesting choices between waves.
+
+The fun comes from discovering synergies between rooms, monsters, traps, cards, and bosses.
+
+Combat is automatic.
+Strategy is everything.
+
+Every run should feel different.
+Every upgrade should feel impactful.
+Every biome should introduce new mechanics.
+
 ## 👑 CORE CONCEPT
 
 You are not the hero.
@@ -303,29 +318,29 @@ Everything should be data-driven using Godot Resources.
 res://
 
 scripts/
-    dungeon/
-    combat/
-    heroes/
-    monsters/
-    rooms/
-    cards/
-    bosses/
-    managers/
+	dungeon/
+	combat/
+	heroes/
+	monsters/
+	rooms/
+	cards/
+	bosses/
+	managers/
 
 resources/
-    rooms/
-    monsters/
-    heroes/
-    bosses/
-    cards/
-    biomes/
+	rooms/
+	monsters/
+	heroes/
+	bosses/
+	cards/
+	biomes/
 
 scenes/
-    dungeon/
-    rooms/
-    heroes/
-    monsters/
-    ui/
+	dungeon/
+	rooms/
+	heroes/
+	monsters/
+	ui/
 ```
 
 ---
