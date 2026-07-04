@@ -1,14 +1,14 @@
 extends Node
 
-signal hero_spawned(hero)
-signal hero_died(hero)
+signal hero_spawned(hero: Node)
+signal hero_died(hero: Node)
 
-var active_heroes: Array = []
+var active_heroes: Array[Node] = []
 
 
 func spawn_hero(hero_scene: PackedScene, parent: Node) -> Node:
 
-	var hero = hero_scene.instantiate()
+	var hero: Node = hero_scene.instantiate()
 
 	parent.add_child(hero)
 
@@ -28,12 +28,16 @@ func remove_hero(hero: Node) -> void:
 
 	hero_died.emit(hero)
 
-	hero.queue_free()
+	# Note: intentionally does NOT call hero.queue_free() here.
+	# If the hero is a CombatEntity, take_damage() -> die() already
+	# frees the node. Calling queue_free() again here caused a
+	# double-free / double-signal risk. This function only updates
+	# tracking state and notifies listeners.
 
 
 func clear_heroes() -> void:
 
-	for hero in active_heroes:
+	for hero: Node in active_heroes:
 		if is_instance_valid(hero):
 			hero.queue_free()
 

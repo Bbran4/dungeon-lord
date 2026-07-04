@@ -1,11 +1,11 @@
 extends Node
 
-signal wave_started(wave_number)
-signal wave_completed(wave_number)
+signal wave_started(wave_number: int)
+signal wave_completed(wave_number: int)
 
-@export var starting_wave := 1
+@export var starting_wave: int = 1
 
-var current_wave := 0
+var current_wave: int = 0
 
 
 func reset() -> void:

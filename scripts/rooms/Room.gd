@@ -1,22 +1,22 @@
 extends Node2D
 class_name Room
 
-signal room_clicked(room)
+signal room_clicked(room: Room)
 
-@export var room_data : RoomData
+@export var room_data: RoomData
 
-var monster = null
-var hero = null
+var monster: Node = null
+var hero: Node = null
 
 
-func set_room(data : RoomData):
+func set_room(data: RoomData) -> void:
 
 	room_data = data
 
 	update_visuals()
 
 
-func update_visuals():
+func update_visuals() -> void:
 
 	if room_data == null:
 		return
@@ -24,6 +24,6 @@ func update_visuals():
 	$Label.text = room_data.room_name
 
 
-func _on_button_pressed():
+func _on_button_pressed() -> void:
 
 	room_clicked.emit(self)

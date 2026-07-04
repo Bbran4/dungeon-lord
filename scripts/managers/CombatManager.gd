@@ -1,7 +1,7 @@
 extends Node
 
-signal combat_started(attacker, defender)
-signal combat_finished(winner, loser)
+signal combat_started(attacker: CombatEntity, defender: CombatEntity)
+signal combat_finished(winner: CombatEntity, loser: CombatEntity)
 
 
 func begin_combat(attacker: CombatEntity, defender: CombatEntity) -> void:

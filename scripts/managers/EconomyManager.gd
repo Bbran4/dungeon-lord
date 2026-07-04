@@ -1,10 +1,10 @@
 extends Node
 
-signal gold_changed(new_gold)
+signal gold_changed(new_gold: int)
 
-@export var starting_gold := 100
+@export var starting_gold: int = 100
 
-var gold := 0
+var gold: int = 0
 
 
 func _ready() -> void:

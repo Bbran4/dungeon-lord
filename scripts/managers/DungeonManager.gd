@@ -1,16 +1,16 @@
 extends Node
 
-signal room_placed(room_index, room_data)
-signal room_removed(room_index)
+signal room_placed(room_index: int, room_data: RoomData)
+signal room_removed(room_index: int)
 signal dungeon_generated
 
-var rooms: Array = []
+var rooms: Array[RoomData] = []
 
 
 func generate_dungeon(size: int) -> void:
 	rooms.clear()
 
-	for i in size:
+	for i: int in size:
 		rooms.append(null)
 
 	dungeon_generated.emit()
@@ -38,7 +38,7 @@ func remove_room(index: int) -> void:
 	room_removed.emit(index)
 
 
-func get_room(index: int):
+func get_room(index: int) -> RoomData:
 
 	if index < 0 or index >= rooms.size():
 		return null

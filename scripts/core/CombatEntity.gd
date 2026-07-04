@@ -1,15 +1,15 @@
 extends Node2D
 class_name CombatEntity
 
-signal health_changed(current_health)
-signal died(entity)
+signal health_changed(current_health: int)
+signal died(entity: CombatEntity)
 
 @export var max_health: int = 10
 @export var damage: int = 2
 @export var armor: int = 0
 @export var attack_speed: float = 1.0
 
-var current_health: int
+var current_health: int = 0
 
 
 func _ready() -> void:
