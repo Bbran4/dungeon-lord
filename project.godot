@@ -14,6 +14,15 @@ config/name="DungeonLord"
 config/features=PackedStringArray("4.7", "Forward Plus")
 config/icon="res://icon.svg"
 
+[autoload]
+
+GameManager="*uid://dm66ty5u50mww"
+CombatManager="*uid://besfghwxctc7c"
+DungeonManager="*uid://cvdw4u15kj835"
+EconomyManager="*uid://d1e3g5ep6tful"
+HeroManager="*uid://ddqslnjbvtl03"
+WaveManager="*uid://c5oi4guafvnku"
+
 [display]
 
 window/stretch/mode="canvas_items"
