@@ -287,6 +287,15 @@ Elite raids may contain:
 * Clerics
 * Legendary Heroes
 
+> **Status:** implemented as a real group. Parties of 3-4 (Tank, Healer,
+> a random Mage/Ranger DPS, plus a random 4th class) move and fight
+> together via `Dungeon.gd`, positioned in a class-based formation and
+> resolved as one shared encounter per room via
+> `CombatManager.begin_group_combat()` rather than each hero soloing the
+> dungeon independently. The Tank draws aggro via `Taunt` and
+> self-buffs armor; the Healer keeps the party topped up. Ranger, Mage,
+> and Rogue don't have kits yet — see Combat System.
+
 ---
 
 ### Bosses
@@ -353,24 +362,26 @@ scripts/
 	heroes/        # HeroData
 	monsters/      # MonsterData
 	traps/         # TrapData
+	abilities/     # AbilityData
 	bosses/        # BossData
 	biomes/        # BiomeData
 	cards/         # CardData
 	managers/      # GameManager, EconomyManager, WaveManager,
-				   # DungeonManager, CombatManager, HeroManager
+	               # DungeonManager, CombatManager, HeroManager
 	test/          # TestHarness (manual playtest scene driver)
 
 resources/
 	rooms/         # skeleton_den (3 tiers), spike_corridor.tres
 	monsters/      # skeleton, elite_skeleton, skeleton_champion
 	traps/         # spike_trap.tres
+	abilities/     # tank_shield_wall, tank_taunt, cleric_heal, cleric_chain_heal
 	heroes/        # test_adventurer, tank_knight, cleric_healer,
-				   # ranger_scout, battle_mage, shadow_rogue
+	               # ranger_scout, battle_mage, shadow_rogue
 
 scenes/
 	dungeons/      # Dungeon.tscn, DungeonGrid.tscn
 	rooms/         # Room.tscn
-	test/          # TestHarness.tscn, TestHeroEntity.tscn
+	test/          # TestHarness.tscn, TestHeroEntity.tscn, TestMonsterEntity.tscn
 ```
 
 `resources/` is now real, authored content covering a 3-tier room
@@ -414,6 +425,21 @@ icon : Texture2D
 
 ---
 
+### AbilityData
+
+```
+ability_name : String
+ability_type : String ("Attack" | "Heal" | "ChainHeal" | "Buff" | "Taunt")
+target_rule : String ("LowestHpAlly" | "Self")   # only used by Heal/ChainHeal/Buff/Taunt
+cooldown : float
+magnitude : int        # damage/heal amount, or armor bonus for Buff
+duration : float        # buff/taunt duration; unused by instant effects
+chain_count : int       # ChainHeal only - extra lowest-HP allies healed
+icon : Texture2D
+```
+
+---
+
 ### MonsterData
 
 ```
@@ -422,7 +448,7 @@ max_health : int
 damage : int
 armor : int
 attack_speed : float
-abilities : Array[String]
+abilities : Array[AbilityData]
 sprite : Texture2D
 ```
 
@@ -436,7 +462,7 @@ max_health : int
 damage : int
 armor : int
 attack_speed : float
-abilities : Array[String]
+abilities : Array[AbilityData]
 class_type : String ("Tank" | "Healer" | "Mage" | "Ranger" | "Rogue")
 priority : int
 sprite : Texture2D
@@ -489,9 +515,32 @@ special_rules : Array[String]
 
 ## ⚔️ COMBAT SYSTEM
 
-Combat is fully automated: `CombatManager.begin_combat()` alternates
-`attack()` calls between two `CombatEntity` nodes until one reaches 0
-health.
+Combat is fully automated: `CombatManager.begin_group_combat()` runs a
+tick-based simulation where every hero and monster in a room fight
+together as groups, not 1v1. Each combatant acts independently whenever
+their own ability cooldowns allow it - `attack_speed` now genuinely
+matters, since it sets the cooldown of the implicit basic attack.
+
+Each combatant has an `abilities` list (`AbilityData` resources) on top
+of an auto-generated basic attack. When multiple abilities are off
+cooldown at once, one is chosen **at random** among the ready ones - no
+priority order, no role logic.
+
+**Aggro:** monsters target using a per-monster threat table (whoever has
+dealt that monster the most cumulative damage). **Taunt is a hard
+override** on top of that - while active, every monster's targeting is
+forced onto the taunting hero(es), completely ignoring threat, for the
+ability's duration.
+
+**Formation:** party members are positioned by `class_type` rather than
+spawn order - Tank at the front, Ranger/Mage in the middle, Healer at
+the back, Rogue past the monster line entirely. This is currently
+positional only, layered on top of the aggro system above.
+
+**Visual feedback:** attacks lunge the attacker toward their target and
+back; overlapping combatants gently push apart (`SeparationArea`); a
+taunting entity turns blood red for the taunt's duration; a healed
+entity flashes green for 0.5s.
 
 The player's decisions happen between battles through:
 
@@ -502,15 +551,17 @@ The player's decisions happen between battles through:
 
 The focus is strategy rather than micro-management.
 
-> **Known simplification:** `attack_speed` is exported on `CombatEntity`,
-> `HeroData`, and `MonsterData`, but the current combat loop ignores it —
-> turns strictly alternate attacker/defender regardless of speed. Speed
-> as a mechanic isn't wired up yet.
+> **Implemented kits:** Tank (`Shield Wall` self-buff armor, `Taunt`
+> hard-override aggro) and Healer (`Heal` lowest-HP ally, `Chain Heal`
+> splashing to 2 additional allies at reduced effectiveness). Mage,
+> Ranger, and Rogue currently have no special abilities and only use
+> their basic attack - their class-specific kits (fireball/chain
+> lightning/ice spike, arrow types, poison/backstab) are the next step.
 >
-> **Known simplification:** each hero fights a *freshly spawned* monster
-> instance per room (`Dungeon._spawn_monster_entity`), so a room's
-> monster is never worn down or permanently defeated across a wave —
-> every hero that reaches an occupied room gets a full-health fight.
+> **Known simplification:** hero-side Attack-type targeting (both the
+> basic attack and any future Attack-type hero ability) is a random
+> living monster - there's no hero-side targeting AI yet (e.g. a Rogue
+> preferring an untaunted target for a backstab-style bonus).
 
 ---
 
@@ -523,21 +574,25 @@ What's actually playable today, via `scenes/test/TestHarness.tscn`:
 * ✅ Drag a matching card onto a room's upgrade prompt to upgrade it (spends the cost delta); upgrade chains of 3+ tiers work correctly, matched by exact resource rather than by room name
 * ✅ Click a room to select it and reveal a Sell button (refunds half cost)
 * ✅ Rooms visually display their occupying monster's name, not just the room name
-* ✅ Send a hero (or test combat sandbox) through the dungeon; combat auto-resolves room by room
 * ✅ Trap rooms resolve as a single probabilistic damage instance, distinct from monster combat (no counter-attack, no `CombatManager`)
-* ✅ Multi-hero parties (Tank/Healer/Ranger/Mage, plus a random 4th class) can be sent as a group via `Dungeon.send_wave()`, with staggered spawning and independent resolution per hero
+* ✅ Multi-hero parties (Tank/Healer/Ranger/Mage, plus a random 4th class) move and fight together as a real group via `Dungeon.send_wave()` + `CombatManager.begin_group_combat()` — not solo runs anymore
+* ✅ Class-based formation (Tank front, Ranger/Mage mid, Healer back, Rogue flanking past the monster line)
+* ✅ Monsters spawn visibly in their room up front (not lazily on arrival) and stay put until fought or the wave ends
+* ✅ Aggro via a per-monster threat table (highest cumulative damage dealt); Tank `Taunt` is a hard override that forces monster targeting onto the taunting hero for its duration
+* ✅ Ability/cooldown system (`AbilityData`): every combatant has an implicit basic attack (now genuinely paced by `attack_speed`) plus authored special abilities, chosen randomly among whichever are off cooldown. Tank kit (Shield Wall self-buff, Taunt) and Healer kit (Heal, Chain Heal) are implemented; Mage/Ranger/Rogue have no special abilities yet
+* ✅ Visual combat feedback: attack lunge toward target and back, overlap-based separation push between combatants, taunting entities turn red, healed entities flash green
 * ✅ Gold economy, wave counter, and a scrolling event log
 * ✅ Pan (WASD/arrows or middle-mouse drag) and zoom (mouse wheel) camera
 * ✅ `GameManager` gates building actions by phase (insert/upgrade/sell only succeed during BUILDING, enforced in `DungeonGrid`); "Send Wave" transitions to COMBAT, `Dungeon.wave_cleared` transitions to REWARD, which currently loops straight back to BUILDING (no card draft yet)
 * ✅ `HeroManager.spawn_hero`/`remove_hero`/`active_heroes` backs `Dungeon.gd`'s hero tracking directly — no more private hero counter
-* ✅ Room/monster/trap/hero content authored as real `.tres` resources under `resources/`, wired into `TestHarness` via `@export` fields
+* ✅ Room/monster/trap/ability/hero content authored as real `.tres` resources under `resources/`, wired into `TestHarness` via `@export` fields
 * ✅ Gold is earned per-hero based on damage taken vs. effective max health, plus a full-wipe bonus — not from winning fights or clearing rooms (see `EconomyManager.gd`)
 
 Notably **not yet wired up**, despite the underlying scripts existing:
 
 * ⬜ No reward-phase content yet — `_on_reward_phase_started` immediately loops back to building since there's no card draft system
 * ⬜ Utility rooms (buff/support rooms with no combat role) don't exist yet — deferred by design until after cards
-* ⬜ `HeroData.class_type` and hero abilities are unused in *behavior* — a party of Tank/Healer/Ranger/Mage all fight identically and independently; there's no aggro, formation order, or Healer actually healing anyone
+* ⬜ Mage, Ranger, and Rogue have no special abilities yet (fireball/chain lightning/ice spike, arrow types, poison/backstab) — they currently only use their basic attack
 * ⬜ `BossData` has no room encounter, phase, or summon logic
 
 > **Architecture note:** the original plan called this a "Dungeon Grid,"
@@ -574,7 +629,7 @@ Players should constantly think:
 6. ✅ Room Upgrades
 7. 🟡 Wave System *(counter exists; no auto-advance, scaling, or party spawning yet)*
 8. ⬜ Card Drafting
-9. 🟡 Hero Parties *(multi-hero parties tested end-to-end via `Dungeon.send_wave` + `HeroManager`; classes/abilities still don't affect behavior — no Party AI yet)*
+9. 🟡 Hero Parties *(parties move and fight together with class formation, aggro/taunt, and Tank/Healer kits; Mage/Ranger/Rogue still only basic-attack — see Milestone 4)*
 10. ⬜ Boss Room
 11. ⬜ Biomes
 12. ⬜ Meta Progression
@@ -623,7 +678,7 @@ Expand the player's choices.
 
 * 🟡 Multiple room types *(trap rooms done — see `TrapData`/`spike_corridor.tres`; utility rooms deliberately deferred until after the card system)*
 * ✅ Room upgrades *(multi-tier chains work end-to-end — validated with a 3-tier Skeleton Den; `RoomUpgradeZone` now matches the exact upgrade resource rather than by room name, fixing a bug that would've misfired once a room had 2+ upgrade tiers)*
-* ⬜ Economy balancing *(deliberately deferred until hero parties actually behave like parties — tuning gold/cost numbers against heroes that don't yet aggro, heal, or coordinate would just need redoing later)*
+* ⬜ Economy balancing *(deliberately deferred until all classes behave like a real party — Tank/Healer now have real kits, but Mage/Ranger/Rogue are still basic-attack only, so tuning gold/cost numbers now would just need redoing once they're finished)*
 * ✅ Dungeon expansion (insert/remove rooms mid-run)
 * 🟡 Multiple waves *(wave counter exists; no content or party scaling per wave)*
 
@@ -657,7 +712,7 @@ Introduce build variety.
 
 ---
 
-## 🟡 MILESTONE 4 — Hero Parties (NOT STARTED)
+## 🟡 MILESTONE 4 — Hero Parties (IN PROGRESS)
 
 ### Goal
 
@@ -665,9 +720,9 @@ Increase tactical depth.
 
 ### Tasks
 
-* ⬜ Multiple hero classes *(`HeroData.class_type` exists, unused in behavior)*
-* ⬜ Party AI
-* ⬜ Hero abilities
+* 🟡 Multiple hero classes *(`class_type` now drives formation position; Tank and Healer have real kits, Mage/Ranger/Rogue don't yet)*
+* 🟡 Party AI *(aggro/threat table + Tank taunt hard-override implemented in `CombatManager`; no hero-side targeting AI yet - heroes still pick a random enemy)*
+* 🟡 Hero abilities *(`AbilityData` + cooldown system implemented; Tank: Shield Wall + Taunt, Healer: Heal + Chain Heal; Mage/Ranger/Rogue kits not started)*
 * ⬜ Elite heroes
 * ⬜ Party compositions
 
