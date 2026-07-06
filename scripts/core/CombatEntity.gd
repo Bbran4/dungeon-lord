@@ -16,6 +16,15 @@ func _ready() -> void:
 	current_health = max_health
 
 
+## Sets stats and resets current_health accordingly. Safe to call before
+## or after the node enters the tree.
+func configure(new_max_health: int, new_damage: int, new_armor: int) -> void:
+	max_health = new_max_health
+	damage = new_damage
+	armor = new_armor
+	current_health = max_health
+
+
 func attack(target: CombatEntity) -> void:
 	if target:
 		target.take_damage(damage)

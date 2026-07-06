@@ -6,5 +6,6 @@
 [node name="DungeonGrid" type="Node2D" unique_id=997918969]
 script = ExtResource("1")
 room_scene = ExtResource("2")
-columns = 3
-cell_size = Vector2(600, 600)
+spacing = 600.0
+room_size = Vector2(500, 500)
+gap_width = 100.0
