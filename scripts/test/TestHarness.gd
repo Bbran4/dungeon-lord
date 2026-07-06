@@ -16,8 +16,6 @@ class_name TestHarness
 @onready var skeleton_card: RoomCard = $CanvasLayer/UI/VBox/Palette/SkeletonCard
 @onready var skeleton_upgraded_card: RoomCard = $CanvasLayer/UI/VBox/Palette/SkeletonUpgradedCard
 
-const COMBAT_WIN_REWARD: int = 25
-
 var skeleton_monster_data: MonsterData
 var skeleton_room_data: RoomData
 var skeleton_room_upgraded_data: RoomData
@@ -119,6 +117,8 @@ func _on_fight_pressed() -> void:
 
 	CombatManager.begin_combat(hero_entity, monster_entity)
 
+	EconomyManager.award_hero_damage_gold(hero_entity, test_hero_data)
+
 	if is_instance_valid(hero_entity):
 		hero_entity.queue_free()
 	if is_instance_valid(monster_entity):
@@ -150,6 +150,7 @@ func _on_combatant_died(entity: CombatEntity) -> void:
 	_log("%s died." % entity.name)
 
 
+# _on_combat_finished loses its gold-granting branch, logging only:
 func _on_combat_finished(winner: CombatEntity, loser: CombatEntity) -> void:
 
 	if not is_instance_valid(winner):
@@ -157,9 +158,6 @@ func _on_combat_finished(winner: CombatEntity, loser: CombatEntity) -> void:
 
 	var loser_name: String = loser.name if is_instance_valid(loser) else "???"
 	_log("%s defeated %s." % [winner.name, loser_name])
-
-	if winner.name.begins_with("Hero"):
-		EconomyManager.add_gold(COMBAT_WIN_REWARD)
 
 
 func _on_gold_changed(new_gold: int) -> void:
