@@ -49,10 +49,14 @@ func can_afford(amount: int) -> bool:
 ## hero that escapes with some damage taken still earns partial credit.
 ## Damage dealt BY heroes (killing monsters, clearing rooms) never earns
 ## gold - only damage TAKEN by heroes does.
-func award_hero_damage_gold(hero: CombatEntity, hero_data: HeroData) -> void:
-
-	if hero_data == null:
-		return
+##
+## gold_value is passed in directly (rather than read off HeroData)
+## because the CALLER is responsible for scaling it by
+## WaveManager.current_stat_multiplier() first - the same multiplier
+## applied to the hero's stats - so the gold-per-damage-point rate stays
+## constant as waves get tougher, instead of silently degrading as
+## max_health scales up but gold_value doesn't.
+func award_hero_damage_gold(hero: CombatEntity, gold_value: int) -> void:
 
 	var effective_max: int = hero.effective_max_health()
 
@@ -60,23 +64,19 @@ func award_hero_damage_gold(hero: CombatEntity, hero_data: HeroData) -> void:
 		return
 
 	var ratio: float = clampf(float(hero.damage_taken) / float(effective_max), 0.0, 1.0)
-	var earned: int = int(round(hero_data.gold_value * ratio))
+	var earned: int = int(round(gold_value * ratio))
 
 	if earned > 0:
 		add_gold(earned)
 
 
 ## Awards a bonus when an entire hero party is wiped out with no
-## survivors, scaled off the party's combined gold_value.
-func award_wipe_bonus(hero_data_list: Array[HeroData]) -> void:
+## survivors, scaled off the party's combined (already-scaled)
+## gold_value total - see award_hero_damage_gold for why the caller
+## passes an already-scaled total rather than raw HeroData.
+func award_wipe_bonus(total_gold_value: int) -> void:
 
-	var total_value: int = 0
-
-	for hero_data: HeroData in hero_data_list:
-		if hero_data != null:
-			total_value += hero_data.gold_value
-
-	var bonus: int = int(round(total_value * full_wipe_bonus_ratio))
+	var bonus: int = int(round(total_gold_value * full_wipe_bonus_ratio))
 
 	if bonus > 0:
 		add_gold(bonus)

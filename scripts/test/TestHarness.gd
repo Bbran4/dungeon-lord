@@ -126,7 +126,7 @@ func _on_fight_pressed() -> void:
 
 	await CombatManager.begin_group_combat([hero_entity], [monster_entity])
 
-	EconomyManager.award_hero_damage_gold(hero_entity, test_hero_data)
+	EconomyManager.award_hero_damage_gold(hero_entity, test_hero_data.gold_value)
 
 	if is_instance_valid(hero_entity):
 		hero_entity.queue_free()

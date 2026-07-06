@@ -6,11 +6,12 @@ extends Node
 ## the next attempt sends a party of the SAME strength again; the
 ## Dungeon Lord must hold the line before heroes get any stronger.
 ##
-## Hero stats for a given attempt are scaled by current_stat_multiplier(),
-## which compounds per tier survived - 1.0x at tier 0 (no wipes yet),
-## 1.1x after the first full wipe, 1.21x after the second, and so on.
-## See Dungeon.send_wave() for where this actually gets applied to
-## spawned heroes.
+## Hero stats (and gold value) for a given attempt are scaled by
+## current_stat_multiplier(), which increases LINEARLY per tier
+## survived - 1.0x at tier 0 (no wipes yet), 1.1x after the first full
+## wipe, 1.2x after the second, 1.3x after the third, and so on (NOT
+## compounding). See Dungeon.send_wave() for where this actually gets
+## applied to spawned heroes.
 
 signal wave_started(wave_number: int)
 signal wave_completed(wave_number: int, full_wipe: bool)
@@ -18,7 +19,7 @@ signal wave_completed(wave_number: int, full_wipe: bool)
 @export var starting_wave: int = 1
 
 ## Stat multiplier increase per tier advanced (0.10 = +10% per tier,
-## compounding).
+## added linearly - tier 3 is +30%, not +33.1%).
 @export var stat_buff_per_wave: float = 0.10
 
 var current_wave: int = 0
@@ -48,8 +49,9 @@ func complete_wave(full_wipe: bool) -> void:
 	wave_completed.emit(current_wave, full_wipe)
 
 
-## Current stat multiplier heroes should be scaled by for the NEXT wave
-## sent. 1.0 until the first full wipe, then compounds
-## +stat_buff_per_wave per tier survived after that.
+## Current stat multiplier heroes (and their gold_value) should be
+## scaled by for the NEXT wave sent. 1.0 until the first full wipe, then
+## +stat_buff_per_wave per tier survived after that, added linearly:
+## 1.0, 1.1, 1.2, 1.3, ...
 func current_stat_multiplier() -> float:
-	return pow(1.0 + stat_buff_per_wave, float(current_wave))
+	return 1.0 + stat_buff_per_wave * float(current_wave)

@@ -20,11 +20,14 @@ class_name Dungeon
 ## monsters or heroes target (see CombatManager for threat/aggro).
 ##
 ## WAVE SCALING: hero stats (max health, damage, armor, attack speed)
-## are scaled by WaveManager.current_stat_multiplier() at spawn time -
-## HeroData resources themselves are never mutated, since they're
-## shared assets. The multiplier only increases when the Dungeon Lord
-## fully wipes a party (see wave_cleared below and WaveManager.gd) -
-## escaping heroes send the same-strength party again next time.
+## AND gold_value are all scaled by WaveManager.current_stat_multiplier()
+## at spawn time - HeroData resources themselves are never mutated,
+## since they're shared assets. Scaling gold_value by the same
+## multiplier as max_health keeps the gold-per-damage-point rate
+## constant across tiers (see EconomyManager.award_hero_damage_gold).
+## The multiplier only increases when the Dungeon Lord fully wipes a
+## party (see wave_cleared below and WaveManager.gd) - escaping heroes
+## send the same-strength party again next time.
 ##
 ## Expects a child node named "DungeonGrid" positioned at local origin,
 ## since waypoint coordinates from DungeonGrid are used directly as
@@ -33,9 +36,9 @@ class_name Dungeon
 ## Active hero tracking is delegated to HeroManager (spawn_hero/
 ## remove_hero/active_heroes) as before. Internally, Dungeon also keeps
 ## its own small per-wave roster (_party) pairing each hero's
-## CombatEntity with its HeroData, formation offset, and a "resolved"
-## flag, so gold can be awarded exactly once per hero whether they die
-## mid-run or escape at the end.
+## CombatEntity with its HeroData, formation offset, SCALED gold_value,
+## and a "resolved" flag, so gold can be awarded exactly once per hero
+## whether they die mid-run or escape at the end.
 ##
 ## IMPORTANT: member["entity"] can become a genuinely FREED object by
 ## the time later code reads it back out of _party (combat runs across
@@ -88,10 +91,10 @@ const LANE_SPACING_Y: float = 30.0
 
 var _heroes_escaped_count: int = 0
 var _heroes_died_count: int = 0
-var _current_wave_hero_data: Array[HeroData] = []
 
 ## Each entry: {"entity": Variant (a CombatEntity that may later be
-## freed), "data": HeroData, "offset": Vector2, "resolved": bool}
+## freed), "data": HeroData, "offset": Vector2, "gold_value": int
+## (already scaled by the wave multiplier at spawn time), "resolved": bool}
 var _party: Array[Dictionary] = []
 
 ## room_index (int, matching DungeonManager's room indices) -> Array[CombatEntity].
@@ -109,7 +112,6 @@ func send_wave(hero_data_list: Array[HeroData]) -> void:
 
 	_heroes_escaped_count = 0
 	_heroes_died_count = 0
-	_current_wave_hero_data = hero_data_list.duplicate()
 	_party.clear()
 
 	_spawn_all_room_monsters()
@@ -126,6 +128,7 @@ func send_wave(hero_data_list: Array[HeroData]) -> void:
 		var scaled_damage: int = int(round(hero_data.damage * multiplier))
 		var scaled_armor: int = int(round(hero_data.armor * multiplier))
 		var scaled_attack_speed: float = hero_data.attack_speed * multiplier
+		var scaled_gold_value: int = int(round(hero_data.gold_value * multiplier))
 
 		hero.configure(scaled_max_health, scaled_damage, scaled_armor, scaled_attack_speed, hero_data.abilities)
 		hero.name = "Hero_%s" % hero_data.hero_name
@@ -137,6 +140,7 @@ func send_wave(hero_data_list: Array[HeroData]) -> void:
 			"entity": hero,
 			"data": hero_data,
 			"offset": offset,
+			"gold_value": scaled_gold_value,
 			"resolved": false,
 		})
 
@@ -359,11 +363,9 @@ func _handle_hero_death(member: Dictionary) -> void:
 
 	member["resolved"] = true
 
-	var hero_data: HeroData = member["data"]
-
 	if _is_alive(member["entity"]):
 		var hero: CombatEntity = member["entity"]
-		EconomyManager.award_hero_damage_gold(hero, hero_data)
+		EconomyManager.award_hero_damage_gold(hero, member["gold_value"])
 		HeroManager.remove_hero(hero)
 
 	_heroes_died_count += 1
@@ -382,9 +384,8 @@ func _resolve_escaped_party() -> void:
 			continue
 
 		var hero: CombatEntity = member["entity"]
-		var hero_data: HeroData = member["data"]
 
-		EconomyManager.award_hero_damage_gold(hero, hero_data)
+		EconomyManager.award_hero_damage_gold(hero, member["gold_value"])
 		HeroManager.remove_hero(hero)
 		_heroes_escaped_count += 1
 		hero_escaped.emit(hero)
@@ -406,7 +407,13 @@ func _finish_wave() -> void:
 	var full_wipe: bool = _heroes_escaped_count == 0 and _heroes_died_count > 0
 
 	if full_wipe:
-		EconomyManager.award_wipe_bonus(_current_wave_hero_data)
+
+		var total_gold_value: int = 0
+
+		for member: Dictionary in _party:
+			total_gold_value += member["gold_value"]
+
+		EconomyManager.award_wipe_bonus(total_gold_value)
 
 	wave_cleared.emit(full_wipe)
 
