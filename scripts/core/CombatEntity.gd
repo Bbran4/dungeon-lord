@@ -37,12 +37,17 @@ func configure(new_max_health: int, new_damage: int, new_armor: int) -> void:
 	healing_received = 0
 
 
-func attack(target: CombatEntity) -> void:
-	if target:
-		target.take_damage(damage)
+## Returns the mitigated damage actually dealt (0 if target is null),
+## so callers - namely CombatManager's threat/aggro tracking - can react
+## to how much damage actually landed.
+func attack(target: CombatEntity) -> int:
+	if target == null:
+		return 0
+	return target.take_damage(damage)
 
 
-func take_damage(amount: int, ignore_armor: bool = false) -> void:
+## Returns the mitigated damage actually applied, for the same reason.
+func take_damage(amount: int, ignore_armor: bool = false) -> int:
 
 	var mitigated: int = amount if ignore_armor else amount - armor
 	mitigated = max(1, mitigated)
@@ -54,6 +59,8 @@ func take_damage(amount: int, ignore_armor: bool = false) -> void:
 
 	if current_health <= 0:
 		die()
+
+	return mitigated
 
 
 ## Restores health (capped at max_health) and records the amount healed.

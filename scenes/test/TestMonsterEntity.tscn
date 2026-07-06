@@ -1,0 +1,20 @@
+[gd_scene format=3 uid="uid://by2mwo5u866yk"]
+
+[ext_resource type="Script" uid="uid://ducrphgcjy7by" path="res://scripts/core/CombatEntity.gd" id="1_rwunt"]
+
+[node name="TestMonsterEntity" type="Node2D" unique_id=921975528]
+script = ExtResource("1_rwunt")
+
+[node name="Visual" type="ColorRect" parent="." unique_id=2017058695]
+offset_left = -20.0
+offset_top = -20.0
+offset_right = 20.0
+offset_bottom = 20.0
+color = Color(0.8823829, 0.42358288, 0.42358288, 1)
+
+[node name="Label" type="Label" parent="." unique_id=1052130760]
+offset_left = -30.0
+offset_top = -45.0
+offset_right = -30.0
+offset_bottom = -45.0
+text = "Monster"

@@ -2,12 +2,22 @@ extends Node2D
 class_name Dungeon
 
 ## Moves a whole hero party together through the dungeon's room sequence
-## and resolves each room as a GROUP encounter (all living party members
-## vs. all of a room's monsters at once via CombatManager.
-## begin_group_combat), rather than each hero running the dungeon solo.
-## This is what makes party mechanics meaningful - a Tank, Healer, etc.
-## can only matter to "the party" if the party is actually fighting
-## together in the same room at the same time.
+## and resolves each room as a GROUP encounter via
+## CombatManager.begin_group_combat.
+##
+## Room monsters are spawned up front, all at once, when the wave
+## starts - not lazily when the party happens to arrive. Each room's
+## monster group sits visibly at that room's position for the whole
+## wave (tracked in _room_monsters, keyed by room index) until the
+## party reaches it and fights, or the wave ends and any never-reached
+## room's monsters are cleaned up. Monsters never move from their room.
+##
+## Heroes are positioned using a class-based FORMATION rather than
+## simple spawn order: Tank at the front (closest to the monster line),
+## Ranger/Mage in the middle, Healer at the back, Rogue positioned past
+## the monster line entirely (flanking). See _compute_formation_offsets.
+## This is purely positional for now - it does not yet affect who
+## monsters or heroes target (see CombatManager for threat/aggro).
 ##
 ## Expects a child node named "DungeonGrid" positioned at local origin,
 ## since waypoint coordinates from DungeonGrid are used directly as
@@ -16,27 +26,25 @@ class_name Dungeon
 ## Active hero tracking is delegated to HeroManager (spawn_hero/
 ## remove_hero/active_heroes) as before. Internally, Dungeon also keeps
 ## its own small per-wave roster (_party) pairing each hero's
-## CombatEntity with its HeroData and a "resolved" flag, so gold can be
-## awarded exactly once per hero whether they die mid-run or escape at
-## the end.
+## CombatEntity with its HeroData, formation offset, and a "resolved"
+## flag, so gold can be awarded exactly once per hero whether they die
+## mid-run or escape at the end.
+##
+## IMPORTANT: member["entity"] can become a genuinely FREED object by
+## the time later code reads it back out of _party (combat runs across
+## many awaited ticks after a hero dies). Passing a freed reference
+## straight into a function/variable typed as CombatEntity crashes at
+## the call boundary itself, so every read of member["entity"] here
+## goes through _is_alive(), which takes an untyped Variant and checks
+## is_instance_valid() BEFORE anything ever touches a CombatEntity-typed
+## slot.
 ##
 ## A room may carry a trap, a monster group, or both. Traps resolve
 ## first, individually per living hero - a single probabilistic damage
 ## instance with no counter-attack, no CombatManager involvement. Room
-## monsters resolve as a single group encounter for whoever in the party
-## is still alive; a room can field more than one monster via
+## monsters resolve as a group encounter for whoever in the party is
+## still alive; a room can field more than one monster via
 ## RoomData.monster_count (e.g. a Skeleton Den fielding 3 Skeletons).
-##
-## IMPORTANT: member["entity"] can become a genuinely FREED object by
-## the time later code reads it back out of _party (not just "queued
-## for deletion" - actually deallocated), since combat runs across many
-## awaited ticks after a hero dies. Passing a freed reference straight
-## into a function/variable typed as CombatEntity crashes at the call
-## boundary itself (a strict class check on the freed object) rather
-## than failing gracefully. So every read of member["entity"] here goes
-## through _is_alive(), which takes an untyped Variant and checks
-## is_instance_valid() BEFORE anything ever touches a CombatEntity-typed
-## slot.
 ##
 ## Gold is awarded per-hero, once, at the moment they're resolved
 ## (killed or escaped), via EconomyManager.award_hero_damage_gold(). If
@@ -50,19 +58,38 @@ signal wave_cleared
 @onready var dungeon_grid: DungeonGrid = $DungeonGrid
 
 @export var hero_scene: PackedScene
+@export var monster_scene: PackedScene
 @export var move_speed: float = 200.0
 
-## Vertical spacing (px) between party members so they don't fully
-## overlap visually while moving and fighting as a group.
-@export var party_spread: float = 30.0
+## Forward (x, relative to the party's shared waypoint) offset per
+## class_type. Positive = further along the path, i.e. closer to
+## whatever the party is about to fight. Rogue sits past the monster
+## line entirely (monsters spawn at offset 0 on this axis).
+const ROW_OFFSET_X: Dictionary = {
+	"Tank": 40.0,
+	"Ranger": 0.0,
+	"Mage": 0.0,
+	"Healer": -40.0,
+	"Rogue": 90.0,
+}
+
+## Lateral (y) spacing between multiple heroes sharing the same row,
+## so e.g. two Tanks don't render stacked exactly on top of each other.
+const LANE_SPACING_Y: float = 30.0
 
 var _heroes_escaped_count: int = 0
 var _heroes_died_count: int = 0
 var _current_wave_hero_data: Array[HeroData] = []
 
 ## Each entry: {"entity": Variant (a CombatEntity that may later be
-## freed), "data": HeroData, "offset_y": float, "resolved": bool}
+## freed), "data": HeroData, "offset": Vector2, "resolved": bool}
 var _party: Array[Dictionary] = []
+
+## room_index (int, matching DungeonManager's room indices) -> Array[CombatEntity].
+## Populated all at once at the start of a wave; entries are removed as
+## each room is fought, and anything left over is cleaned up when the
+## wave ends.
+var _room_monsters: Dictionary = {}
 
 
 func send_wave(hero_data_list: Array[HeroData]) -> void:
@@ -76,26 +103,56 @@ func send_wave(hero_data_list: Array[HeroData]) -> void:
 	_current_wave_hero_data = hero_data_list.duplicate()
 	_party.clear()
 
-	var count: int = hero_data_list.size()
+	_spawn_all_room_monsters()
 
-	for i: int in count:
+	var offsets: Array[Vector2] = _compute_formation_offsets(hero_data_list)
+
+	for i: int in hero_data_list.size():
 
 		var hero_data: HeroData = hero_data_list[i]
 		var hero: CombatEntity = HeroManager.spawn_hero(hero_scene, self) as CombatEntity
 		hero.configure(hero_data.max_health, hero_data.damage, hero_data.armor)
 		hero.name = "Hero_%s" % hero_data.hero_name
 
-		var offset_y: float = (i - (count - 1) / 2.0) * party_spread
-		hero.position = Vector2(0, offset_y)
+		var offset: Vector2 = offsets[i]
+		hero.position = offset
 
 		_party.append({
 			"entity": hero,
 			"data": hero_data,
-			"offset_y": offset_y,
+			"offset": offset,
 			"resolved": false,
 		})
 
 	_run_party()
+
+
+## Assigns each hero a (forward, lateral) offset based on class_type.
+## Heroes sharing a row are spread laterally so they don't overlap.
+func _compute_formation_offsets(hero_data_list: Array[HeroData]) -> Array[Vector2]:
+
+	var row_counts: Dictionary = {}
+
+	for hero_data: HeroData in hero_data_list:
+		var row: String = hero_data.class_type
+		row_counts[row] = row_counts.get(row, 0) + 1
+
+	var row_seen: Dictionary = {}
+	var offsets: Array[Vector2] = []
+
+	for hero_data: HeroData in hero_data_list:
+
+		var row: String = hero_data.class_type
+		var lane_index: int = row_seen.get(row, 0)
+		row_seen[row] = lane_index + 1
+
+		var total_in_row: int = row_counts[row]
+		var lateral: float = (lane_index - (total_in_row - 1) / 2.0) * LANE_SPACING_Y
+		var forward: float = ROW_OFFSET_X.get(row, 0.0)
+
+		offsets.append(Vector2(forward, lateral))
+
+	return offsets
 
 
 func _run_party() -> void:
@@ -121,14 +178,19 @@ func _run_party() -> void:
 
 		if room_data != null and room_data.monster != null:
 
+			# Path index i corresponds to room index i - 1 (index 0 of
+			# the path is the entrance, which has no room).
+			var room_index: int = i - 1
+			var monsters: Array[CombatEntity] = _room_monsters.get(room_index, [])
 			var living_heroes: Array[CombatEntity] = _living_party_entities()
-			var monsters: Array[CombatEntity] = _spawn_monster_group(room_data, waypoints[i])
 
 			await CombatManager.begin_group_combat(living_heroes, monsters)
 
 			for monster: CombatEntity in monsters:
 				if is_instance_valid(monster):
 					monster.queue_free()
+
+			_room_monsters.erase(room_index)
 
 			_resolve_dead_party_members()
 
@@ -168,11 +230,9 @@ func _move_party_to(waypoint: Vector2) -> void:
 		if not _is_alive(member["entity"]):
 			continue
 
-		# Only cast to the typed CombatEntity local AFTER _is_alive has
-		# already confirmed it's safe to do so.
 		var hero: CombatEntity = member["entity"]
 
-		var target: Vector2 = waypoint + Vector2(0, member["offset_y"])
+		var target: Vector2 = waypoint + member["offset"]
 		var distance: float = hero.position.distance_to(target)
 		var duration: float = distance / move_speed if move_speed > 0.0 else 0.0
 
@@ -188,6 +248,29 @@ func _move_party_to(waypoint: Vector2) -> void:
 		await tween.finished
 
 
+## Spawns every room's monster group up front, all at once, positioned
+## at that room's waypoint. Monsters stay put there for the rest of the
+## wave - they never move - until the party reaches them (fought and
+## freed in _run_party) or the wave ends (cleaned up in
+## _clear_remaining_room_monsters).
+func _spawn_all_room_monsters() -> void:
+
+	_clear_remaining_room_monsters()
+
+	var waypoints: Array[Vector2] = dungeon_grid.get_path_waypoints()
+	var room_count: int = DungeonManager.room_count()
+
+	for i: int in room_count:
+
+		var room_data: RoomData = DungeonManager.get_room(i)
+
+		if room_data != null and room_data.monster != null:
+			# Room i sits at waypoint index i + 1 (index 0 is the entrance).
+			_room_monsters[i] = _spawn_monster_group(room_data, waypoints[i + 1])
+		else:
+			_room_monsters[i] = []
+
+
 func _spawn_monster_group(room_data: RoomData, at_position: Vector2) -> Array[CombatEntity]:
 
 	var monsters: Array[CombatEntity] = []
@@ -195,12 +278,15 @@ func _spawn_monster_group(room_data: RoomData, at_position: Vector2) -> Array[Co
 
 	for i: int in count:
 
-		var monster: CombatEntity = CombatEntity.new()
+		var monster: CombatEntity = monster_scene.instantiate() as CombatEntity
 		monster.name = "Monster_%s_%d" % [room_data.monster.monster_name, i + 1]
 
 		add_child(monster)
 		monster.configure(room_data.monster.max_health, room_data.monster.damage, room_data.monster.armor)
 		monster.position = at_position + Vector2(0, (i - (count - 1) / 2.0) * 40.0)
+
+		if monster.has_node("Label"):
+			monster.get_node("Label").text = room_data.monster.monster_name
 
 		monsters.append(monster)
 
@@ -238,13 +324,10 @@ func _resolve_dead_party_members() -> void:
 
 ## By the time this runs, the hero may be freed already (see the note
 ## at the top of this file) - so this must NOT touch member["entity"]
-## as a CombatEntity at all. Gold was already recorded via
-## damage_taken/effective_max_health while the hero was still alive;
-## EconomyManager reads those off whatever's cached on the HeroData/
-## CombatEntity pairing at the time of death instead of needing a live
-## reference here. HeroManager.remove_hero() only updates tracking (it
-## does NOT call queue_free()), so this is safe even on an
-## already-freed entry - see the double-free note in HeroManager.gd.
+## as a CombatEntity unless _is_alive confirms it's safe.
+## HeroManager.remove_hero() only updates tracking (it does NOT call
+## queue_free()), so this is safe even on an already-freed entry - see
+## the double-free note in HeroManager.gd.
 func _handle_hero_death(member: Dictionary) -> void:
 
 	if member["resolved"]:
@@ -294,7 +377,19 @@ func _finish_wave() -> void:
 		if not member["resolved"]:
 			_handle_hero_death(member)
 
+	_clear_remaining_room_monsters()
+
 	if _heroes_escaped_count == 0 and _heroes_died_count > 0:
 		EconomyManager.award_wipe_bonus(_current_wave_hero_data)
 
 	wave_cleared.emit()
+
+
+func _clear_remaining_room_monsters() -> void:
+
+	for key: int in _room_monsters.keys():
+		for monster: CombatEntity in _room_monsters[key]:
+			if is_instance_valid(monster):
+				monster.queue_free()
+
+	_room_monsters.clear()

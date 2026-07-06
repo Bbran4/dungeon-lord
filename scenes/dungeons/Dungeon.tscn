@@ -3,9 +3,11 @@
 [ext_resource type="Script" uid="uid://ds66ians8i88j" path="res://scripts/dungeon/Dungeon.gd" id="1_wao25"]
 [ext_resource type="PackedScene" uid="uid://dwsggd0e6chrl" path="res://scenes/dungeons/DungeonGrid.tscn" id="2"]
 [ext_resource type="PackedScene" uid="uid://doc32nnqv0ify" path="res://scenes/test/TestHeroEntity.tscn" id="3"]
+[ext_resource type="PackedScene" uid="uid://by2mwo5u866yk" path="res://scenes/test/TestMonsterEntity.tscn" id="3_50s2o"]
 
 [node name="Dungeon" type="Node2D" unique_id=997918969]
 script = ExtResource("1_wao25")
 hero_scene = ExtResource("3")
+monster_scene = ExtResource("3_50s2o")
 
 [node name="DungeonGrid" parent="." unique_id=1739853857 instance=ExtResource("2")]
