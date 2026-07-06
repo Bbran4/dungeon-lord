@@ -14,3 +14,9 @@ class_name MonsterData
 @export var abilities : Array[AbilityData]
 
 @export var sprite : Texture2D
+
+## Whether this monster steps forward to meet charging melee heroes
+## partway when a room fight begins (see
+## Dungeon._charge_melee_into_combat). Defaults true - all current
+## monster content is melee.
+@export var is_melee : bool = true

@@ -1,6 +1,7 @@
 [gd_resource type="Resource" script_class="HeroData" format=3 uid="uid://bi6f5sc2hj8js"]
 
 [ext_resource type="Script" uid="uid://cjwm4rv0y2emj" path="res://scripts/heroes/HeroData.gd" id="1_faeej"]
+[ext_resource type="Script" uid="uid://gwfofjo7s5bk" path="res://scripts/abilities/AbilityData.gd" id="1_pivnv"]
 
 [resource]
 script = ExtResource("1_faeej")
@@ -11,4 +12,5 @@ attack_speed = 1.3
 class_type = "Ranger"
 priority = 2
 gold_value = 25
+is_melee = false
 metadata/_custom_type_script = "uid://cjwm4rv0y2emj"

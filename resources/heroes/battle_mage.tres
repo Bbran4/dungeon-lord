@@ -1,6 +1,7 @@
 [gd_resource type="Resource" script_class="HeroData" format=3 uid="uid://cboygfugp7xf4"]
 
 [ext_resource type="Script" uid="uid://cjwm4rv0y2emj" path="res://scripts/heroes/HeroData.gd" id="1_dnq5u"]
+[ext_resource type="Script" uid="uid://gwfofjo7s5bk" path="res://scripts/abilities/AbilityData.gd" id="1_gxaan"]
 
 [resource]
 script = ExtResource("1_dnq5u")
@@ -10,4 +11,5 @@ damage = 7
 class_type = "Mage"
 priority = 2
 gold_value = 25
+is_melee = false
 metadata/_custom_type_script = "uid://cjwm4rv0y2emj"

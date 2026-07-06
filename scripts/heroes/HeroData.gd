@@ -23,3 +23,9 @@ var class_type : String = "Tank"
 ## Gold earned if 100% of this hero's effective max health is dealt to
 ## them in damage over the course of a run (see EconomyManager).
 @export var gold_value : int = 20
+
+## Whether this hero charges into melee range when a room fight begins,
+## or holds their formation position as a ranged combatant (see
+## Dungeon._charge_melee_into_combat). Tank/Rogue = true; Healer/Mage/
+## Ranger = false.
+@export var is_melee : bool = true

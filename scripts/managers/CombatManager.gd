@@ -1,9 +1,17 @@
 extends Node
 
-## Tick-based group combat with an ability/cooldown system. Each living
-## combatant, every tick, checks its own abilities (implicit basic
-## attack + any authored specials) for which are off cooldown, and picks
-## RANDOMLY among whichever are ready - not priority order, not role
+## Tick-based group combat with an ability/cooldown system.
+##
+## OPENING ACTIONS: the instant combat begins (elapsed_time = 0), every
+## living actor gets ONE chance to fire a ready non-Attack ability
+## (Buff/Taunt/Heal/ChainHeal) via _perform_opening_actions - this is
+## the "party stops in formation and applies buffs, then the fight
+## begins" beat, rather than leaving Shield Wall/Taunt/Heal to a random
+## tick roll sometime mid-fight. After that one-time pass, the normal
+## per-tick loop below takes over, where each living combatant acts
+## independently once its own ability cooldowns allow it - RANDOMLY
+## among whichever abilities (including the opening ones, once their
+## cooldown comes back around) are ready, not priority order or role
 ## logic.
 ##
 ## AGGRO: monsters target using a per-monster threat table (whoever has
@@ -75,6 +83,11 @@ func begin_group_combat(heroes: Array[CombatEntity], monsters: Array[CombatEntit
 		cooldowns[monster] = {}
 		threat_table[monster] = {}
 
+	# Opening beat: "stop in formation and apply buffs" before the fight
+	# begins. Only ever touches non-Attack abilities.
+	_perform_opening_actions(heroes, cooldowns, active_taunts, active_buffs, elapsed_time)
+	_perform_opening_actions(monsters, cooldowns, active_taunts, active_buffs, elapsed_time)
+
 	while _has_living(heroes) and _has_living(monsters):
 
 		await get_tree().create_timer(TICK_INTERVAL).timeout
@@ -123,6 +136,36 @@ func _describe(entity: Variant) -> String:
 	if entity != null and is_instance_valid(entity):
 		return entity.name
 	return "???"
+
+
+## Runs once, immediately, right when combat begins (elapsed_time = 0)
+## - before the main random-tick loop. Each living actor in `group` gets
+## ONE chance to fire a ready non-Attack ability (Buff/Taunt/Heal/
+## ChainHeal) as an opening beat. Never touches Attack-type abilities -
+## those only ever fire from the normal tick loop.
+func _perform_opening_actions(group: Array[CombatEntity], cooldowns: Dictionary, active_taunts: Dictionary, active_buffs: Array, elapsed_time: float) -> void:
+
+	for actor: CombatEntity in group:
+
+		if not is_instance_valid(actor) or actor.is_queued_for_deletion() or actor.current_health <= 0:
+			continue
+
+		var actor_cooldowns: Dictionary = cooldowns.get(actor, {})
+
+		for ability: AbilityData in actor.get_combat_abilities():
+
+			if ability.ability_type == GameEnums.AbilityType.ATTACK:
+				continue
+
+			var remaining: float = actor_cooldowns.get(ability, 0.0)
+
+			if remaining > 0.0:
+				continue
+
+			_execute_support_ability(actor, ability, group, active_taunts, active_buffs, elapsed_time)
+			actor_cooldowns[ability] = ability.cooldown
+			cooldowns[actor] = actor_cooldowns
+			break
 
 
 func _tick_actor(
@@ -176,27 +219,46 @@ func _execute_ability(
 	is_monster_side: bool
 ) -> void:
 
+	if ability.ability_type == GameEnums.AbilityType.ATTACK:
+
+		var actor_name: String = _describe(actor)
+		var target: CombatEntity = _pick_enemy_target(actor, enemies, threat_table, active_taunts, elapsed_time, is_monster_side)
+
+		if target == null:
+			return
+
+		var target_name: String = _describe(target)
+		var dealt: int = actor.attack_with_amount(target, ability.magnitude)
+
+		if is_instance_valid(target) and threat_table.has(target):
+			var monster_threat: Dictionary = threat_table[target]
+			monster_threat[actor] = monster_threat.get(actor, 0.0) + float(dealt)
+			threat_table[target] = monster_threat
+
+		var via: String = " (%s)" % ability.ability_name if ability.ability_name != "Attack" else ""
+		ability_used.emit("%s attacks %s%s for %d" % [actor_name, target_name, via, dealt])
+		return
+
+	_execute_support_ability(actor, ability, allies, active_taunts, active_buffs, elapsed_time)
+
+
+## Handles Heal/ChainHeal/Buff/Taunt - the "support" ability types that
+## only ever target within `allies`, never an enemy. Shared between the
+## main per-tick execution above and the opening-actions pass
+## (_perform_opening_actions), so a Tank's Taunt or a Healer's Heal can
+## fire the instant combat starts, not just from a later random roll.
+func _execute_support_ability(
+	actor: CombatEntity,
+	ability: AbilityData,
+	allies: Array[CombatEntity],
+	active_taunts: Dictionary,
+	active_buffs: Array,
+	elapsed_time: float
+) -> void:
+
 	var actor_name: String = _describe(actor)
 
 	match ability.ability_type:
-
-		GameEnums.AbilityType.ATTACK:
-
-			var target: CombatEntity = _pick_enemy_target(actor, enemies, threat_table, active_taunts, elapsed_time, is_monster_side)
-
-			if target == null:
-				return
-
-			var target_name: String = _describe(target)
-			var dealt: int = actor.attack_with_amount(target, ability.magnitude)
-
-			if is_instance_valid(target) and threat_table.has(target):
-				var monster_threat: Dictionary = threat_table[target]
-				monster_threat[actor] = monster_threat.get(actor, 0.0) + float(dealt)
-				threat_table[target] = monster_threat
-
-			var via: String = " (%s)" % ability.ability_name if ability.ability_name != "Attack" else ""
-			ability_used.emit("%s attacks %s%s for %d" % [actor_name, target_name, via, dealt])
 
 		GameEnums.AbilityType.HEAL:
 
@@ -355,14 +417,6 @@ func _expire_buffs(active_buffs: Array, elapsed_time: float) -> void:
 	active_buffs.append_array(remaining)
 
 
-## Removes a taunt the instant EITHER its duration has run out OR its
-## owner is no longer alive - dying clears the taunt immediately rather
-## than waiting for it to time out on its own, which is what left
-## monsters hard-locked onto a dead hero before this fix. Iterates
-## active_taunts.keys() untyped (see file-level note) since a dead
-## hero's key may already be a genuinely freed object. Emits a log line
-## either way, distinguishing "faded" (timed out) from "ended" (owner
-## died), so it's visible in the log why a taunt stopped.
 func _expire_taunts(active_taunts: Dictionary, elapsed_time: float) -> void:
 
 	var expired: Array = []

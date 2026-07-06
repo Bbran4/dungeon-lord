@@ -9,6 +9,12 @@ signal died(entity: CombatEntity)
 @export var armor: int = 0
 @export var attack_speed: float = 1.0
 
+## Whether this entity charges into melee range when a room fight
+## begins (see Dungeon._charge_melee_into_combat) or holds its
+## formation position as a ranged combatant. Set by Dungeon at spawn
+## time from HeroData.is_melee / MonsterData.is_melee.
+@export var is_melee: bool = true
+
 ## Special abilities beyond the implicit basic attack (see
 ## get_combat_abilities). Authored on HeroData/MonsterData and passed
 ## in via configure().
@@ -34,7 +40,8 @@ const ATTACK_LUNGE_DURATION: float = 0.25
 
 ## How close (in px, center-to-center) two combatants are allowed to get
 ## before separation starts pushing them apart, and how strongly.
-const SEPARATION_RADIUS: float = 18.0
+## Scaled down alongside the 20% smaller circle visuals.
+const SEPARATION_RADIUS: float = 14.4
 const SEPARATION_STRENGTH: float = 250.0
 
 ## Colors for the Taunt (persistent while active) and Heal (brief flash)
@@ -43,16 +50,16 @@ const TAUNT_COLOR: Color = Color(0.55, 0.0, 0.0, 1.0)
 const HEAL_FLASH_COLOR: Color = Color(0.2, 1.0, 0.3, 1.0)
 const HEAL_FLASH_DURATION: float = 0.5
 
-## "Body" (optional) wraps the visual (ColorRect/Label) so the attack
-## lunge can animate it without touching global_position, which stays
-## the entity's real position. "SeparationArea" (optional) is an Area2D
-## used to detect overlapping combatants for the separation push. Both
-## are looked up defensively - a bare CombatEntity.new() with no child
-## scene (e.g. TestHarness's sandbox fight) simply won't lunge or
-## separate, and combat still works fine without them.
+## "Body" (optional) wraps the visual so the attack lunge can animate it
+## without touching global_position, which stays the entity's real
+## position. "SeparationArea" (optional) is an Area2D used to detect
+## overlapping combatants for the separation push. Both are looked up
+## defensively - a bare CombatEntity.new() with no child scene (e.g.
+## TestHarness's sandbox fight) simply won't lunge or separate, and
+## combat still works fine without them.
 @onready var _body: Node2D = get_node_or_null("Body") as Node2D
 @onready var _separation_area: Area2D = get_node_or_null("SeparationArea") as Area2D
-@onready var _visual: ColorRect = get_node_or_null("Body/Visual") as ColorRect
+@onready var _visual: CircleVisual = get_node_or_null("Body/Visual") as CircleVisual
 
 var _attack_tween: Tween
 var _heal_flash_tween: Tween
@@ -210,7 +217,9 @@ func _play_attack_lunge(target_position: Vector2) -> void:
 	var lunge_offset: Vector2 = direction * ATTACK_LUNGE_DISTANCE
 
 	_attack_tween = create_tween()
+	_attack_tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 	_attack_tween.tween_property(_body, "position", lunge_offset, ATTACK_LUNGE_DURATION * 0.5)
+	_attack_tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
 	_attack_tween.tween_property(_body, "position", Vector2.ZERO, ATTACK_LUNGE_DURATION * 0.5)
 
 

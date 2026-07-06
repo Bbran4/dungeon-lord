@@ -5,19 +5,32 @@ class_name Dungeon
 ## and resolves each room as a GROUP encounter via
 ## CombatManager.begin_group_combat.
 ##
+## ENTRANCE SPAWNING: heroes spawn one at a time at the entrance, with a
+## small random gap (hero_spawn_stagger_min..max) between each, all
+## landing in their formation position. The whole party only starts
+## moving toward the first room once everyone has spawned in.
+##
 ## Room monsters AND projectile traps are both spawned up front, all at
 ## once, when the wave starts - not lazily when the party happens to
 ## arrive. A room's monster group and any PoisonArrowTrapController both
 ## sit/run at that room's position for the whole wave, regardless of
 ## where the party currently is, until the wave ends and everything
-## still standing is cleaned up. Entering a projectile-trap room does
-## NOT trigger anything - the trap has already been firing on its own
-## cooldown(s) since the wave began.
+## still standing is cleaned up.
 ##
 ## Heroes are positioned using a class-based FORMATION rather than
 ## simple spawn order: Tank at the front (closest to the monster line),
 ## Ranger/Mage in the middle, Healer at the back, Rogue positioned past
 ## the monster line entirely (flanking). See _compute_formation_offsets.
+##
+## MELEE CHARGE: the instant a room fight begins, melee-flagged living
+## heroes (HeroData.is_melee) tween forward, closing part of the gap to
+## the monster line (never crossing it - see MELEE_MIN_STANDOFF), while
+## melee monsters step forward to meet them partway
+## (_charge_melee_into_combat). Ranged heroes (Healer/Mage/Ranger)
+## simply hold their formation position. This is purely cosmetic -
+## CombatManager's targeting/damage never reads position - and
+## survivors are smoothly returned to proper formation automatically by
+## the next _move_party_to() call once the room is resolved.
 ##
 ## MOVEMENT SLOWDOWN: the party moves at room_danger_speed_multiplier
 ## (< 1.0) while approaching any room containing a monster or a trap -
@@ -78,16 +91,15 @@ signal wave_cleared(full_wipe: bool)
 @export var trap_arrow_scene: PackedScene
 @export var move_speed: float = 200.0
 
+## Random gap range between each hero spawning at the entrance.
+@export var hero_spawn_stagger_min: float = 0.05
+@export var hero_spawn_stagger_max: float = 0.1
+
 ## Multiplier applied to move_speed while the party approaches a room
 ## containing a monster or a trap. < 1.0 = slower, giving traps and
 ## monsters more exposure time.
 @export var room_danger_speed_multiplier: float = 0.5
 
-## Size of the SHARED arrow pool across ALL projectile traps in the
-## dungeon at once - since every projectile trap now fires for the
-## whole wave regardless of party position, this should comfortably
-## cover the sum of max_concurrent_arrows across every projectile-trap
-## room you expect to have built at once.
 @export var arrow_pool_size: int = 12
 
 ## Forward (x, relative to the party's shared waypoint) offset per
@@ -105,6 +117,19 @@ const ROW_OFFSET_X: Dictionary = {
 ## Lateral (y) spacing between multiple heroes sharing the same row,
 ## so e.g. two Tanks don't render stacked exactly on top of each other.
 const LANE_SPACING_Y: float = 30.0
+
+## How much a melee hero closes their forward-offset distance to the
+## monster line when a fight begins, and the closest they're ever
+## allowed to get (so they never overshoot past x=0 or stack on top of
+## monsters).
+const MELEE_CHARGE_DISTANCE: float = 30.0
+const MELEE_MIN_STANDOFF: float = 10.0
+
+## How far melee monsters step forward (toward the hero line) to meet
+## charging melee heroes partway.
+const MONSTER_CHARGE_OFFSET: float = 15.0
+
+const CHARGE_TWEEN_DURATION: float = 0.35
 
 var _heroes_escaped_count: int = 0
 var _heroes_died_count: int = 0
@@ -164,6 +189,7 @@ func send_wave(hero_data_list: Array[HeroData]) -> void:
 		var scaled_gold_value: int = int(round(hero_data.gold_value * multiplier))
 
 		hero.configure(scaled_max_health, scaled_damage, scaled_armor, scaled_attack_speed, hero_data.abilities)
+		hero.is_melee = hero_data.is_melee
 		hero.name = "Hero_%s" % hero_data.hero_name
 
 		var offset: Vector2 = offsets[i]
@@ -176,6 +202,12 @@ func send_wave(hero_data_list: Array[HeroData]) -> void:
 			"gold_value": scaled_gold_value,
 			"resolved": false,
 		})
+
+		# Stagger entrance spawning so the party visibly files in one at
+		# a time rather than popping in all at once. Skip the wait after
+		# the LAST hero - nothing to gain by delaying the move-out.
+		if i < hero_data_list.size() - 1:
+			await get_tree().create_timer(randf_range(hero_spawn_stagger_min, hero_spawn_stagger_max)).timeout
 
 	_run_party()
 
@@ -242,6 +274,8 @@ func _run_party() -> void:
 			var monsters: Array[CombatEntity] = _room_monsters.get(room_index, [])
 			var living_heroes: Array[CombatEntity] = _living_party_entities()
 
+			_charge_melee_into_combat(monsters, waypoints[i])
+
 			await CombatManager.begin_group_combat(living_heroes, monsters)
 
 			for monster: CombatEntity in monsters:
@@ -257,6 +291,46 @@ func _run_party() -> void:
 				return
 
 	_resolve_escaped_party()
+
+
+## Fire-and-forget visual charge: melee-flagged living heroes step
+## forward (reducing their distance to the monster line, but never
+## crossing it) and melee monsters step forward to meet them partway,
+## right as combat begins. Ranged heroes (Healer/Mage/Ranger) and any
+## future ranged monsters simply hold their formation position - this
+## is what gives "ranged stay at range, melee charge in" its visual
+## distinction. Purely cosmetic: CombatManager's targeting/damage logic
+## doesn't read these positions at all, and surviving heroes get
+## tweened back into proper formation automatically by the next
+## _move_party_to() call once this room is resolved.
+func _charge_melee_into_combat(monsters: Array[CombatEntity], room_waypoint: Vector2) -> void:
+
+	for member: Dictionary in _party:
+
+		if not member["data"].is_melee or not _is_alive(member["entity"]):
+			continue
+
+		var hero: CombatEntity = member["entity"]
+		var offset: Vector2 = member["offset"]
+
+		var direction: float = signf(offset.x) if offset.x != 0.0 else 1.0
+		var reduced_x: float = maxf(absf(offset.x) - MELEE_CHARGE_DISTANCE, MELEE_MIN_STANDOFF)
+		var charge_target: Vector2 = room_waypoint + Vector2(direction * reduced_x, offset.y)
+
+		var tween: Tween = create_tween()
+		tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+		tween.tween_property(hero, "position", charge_target, CHARGE_TWEEN_DURATION)
+
+	for monster: CombatEntity in monsters:
+
+		if not _is_alive(monster) or not monster.is_melee:
+			continue
+
+		var charge_target: Vector2 = monster.position + Vector2(MONSTER_CHARGE_OFFSET, 0.0)
+
+		var tween: Tween = create_tween()
+		tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+		tween.tween_property(monster, "position", charge_target, CHARGE_TWEEN_DURATION)
 
 
 ## Takes an untyped Variant - the value stored in _party may by now be a
@@ -307,6 +381,7 @@ func _move_party_to(waypoint: Vector2, speed_multiplier: float = 1.0) -> void:
 			continue
 
 		var tween: Tween = create_tween()
+		tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 		tween.tween_property(hero, "position", target, duration)
 
 		max_duration = maxf(max_duration, duration)
@@ -317,7 +392,8 @@ func _move_party_to(waypoint: Vector2, speed_multiplier: float = 1.0) -> void:
 
 ## Spawns every room's monster group up front, all at once, positioned
 ## at that room's waypoint. Monsters stay put there for the rest of the
-## wave - they never move - until the party reaches them (fought and
+## wave - they never move (aside from the cosmetic charge-in, see
+## _charge_melee_into_combat) - until the party reaches them (fought and
 ## freed in _run_party) or the wave ends (cleaned up in
 ## _clear_remaining_room_monsters). Monster stats are NOT scaled by
 ## WaveManager - only heroes get stronger as tiers advance.
@@ -351,6 +427,7 @@ func _spawn_monster_group(room_data: RoomData, at_position: Vector2) -> Array[Co
 
 		add_child(monster)
 		monster.configure(room_data.monster.max_health, room_data.monster.damage, room_data.monster.armor, room_data.monster.attack_speed, room_data.monster.abilities)
+		monster.is_melee = room_data.monster.is_melee
 		monster.position = at_position + Vector2(0, (i - (count - 1) / 2.0) * 40.0)
 
 		if monster.has_node("Body/Label"):
