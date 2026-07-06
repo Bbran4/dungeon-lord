@@ -1,13 +1,6 @@
 extends Control
 class_name RoomGapZone
 
-## Drop target sitting on the seam between two rooms (or before the
-## entrance / after the last room) - the dungeon-building equivalent of
-## the transition control a video editor shows between two clips. A
-## subtle highlight strip with a centered "+" is always visible so the
-## insert point is discoverable, and both brighten while a RoomCard is
-## dragged over them.
-
 signal drop_requested(gap_index: int, room_data: RoomData)
 
 @export var gap_index: int = -1
@@ -24,6 +17,7 @@ var _plus_label: Label
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	mouse_exited.connect(_on_mouse_exited)
+	visible = false  # hidden until a RoomCard drag starts
 
 	_highlight = ColorRect.new()
 	_highlight.color = IDLE_COLOR
@@ -51,24 +45,22 @@ func _ready() -> void:
 
 
 func _can_drop_data(_at_position: Vector2, data: Variant) -> bool:
-
 	var can_drop: bool = data is RoomData
-
 	_set_hovered(can_drop)
-
 	return can_drop
 
 
 func _drop_data(_at_position: Vector2, data: Variant) -> void:
-
 	_set_hovered(false)
-
 	if data is RoomData:
 		drop_requested.emit(gap_index, data)
 
 
 func _notification(what: int) -> void:
-	if what == NOTIFICATION_DRAG_END:
+	if what == NOTIFICATION_DRAG_BEGIN:
+		visible = get_viewport().gui_get_drag_data() is RoomData
+	elif what == NOTIFICATION_DRAG_END:
+		visible = false
 		_set_hovered(false)
 
 
@@ -77,9 +69,7 @@ func _on_mouse_exited() -> void:
 
 
 func _set_hovered(hovered: bool) -> void:
-
 	if _highlight == null:
 		return
-
 	_highlight.color = HOVER_COLOR if hovered else IDLE_COLOR
 	_plus_label.modulate.a = HOVER_PLUS_ALPHA if hovered else IDLE_PLUS_ALPHA

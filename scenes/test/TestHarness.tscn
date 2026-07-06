@@ -31,6 +31,7 @@ offset_left = 20.0
 offset_top = 20.0
 offset_right = 1127.0
 offset_bottom = 468.0
+mouse_filter = 2
 
 [node name="GoldLabel" type="Label" parent="CanvasLayer/UI/VBox" unique_id=75361414]
 layout_mode = 2
@@ -42,6 +43,7 @@ text = "Wave: 0"
 
 [node name="Palette" type="HBoxContainer" parent="CanvasLayer/UI/VBox" unique_id=1633108841]
 layout_mode = 2
+mouse_filter = 2
 
 [node name="SkeletonCard" type="Button" parent="CanvasLayer/UI/VBox/Palette" unique_id=1633108842]
 custom_minimum_size = Vector2(120, 60)
@@ -59,6 +61,7 @@ script = ExtResource("3")
 
 [node name="Buttons" type="HBoxContainer" parent="CanvasLayer/UI/VBox" unique_id=1412035313]
 layout_mode = 2
+mouse_filter = 2
 
 [node name="FightButton" type="Button" parent="CanvasLayer/UI/VBox/Buttons" unique_id=672070510]
 layout_mode = 2
@@ -70,6 +73,7 @@ text = "Send Hero"
 
 [node name="Buttons2" type="HBoxContainer" parent="CanvasLayer/UI/VBox" unique_id=701418759]
 layout_mode = 2
+mouse_filter = 2
 
 [node name="NextWaveButton" type="Button" parent="CanvasLayer/UI/VBox/Buttons2" unique_id=946578331]
 layout_mode = 2
@@ -84,6 +88,7 @@ custom_minimum_size = Vector2(400, 260)
 layout_mode = 2
 size_flags_horizontal = 8
 size_flags_vertical = 0
+mouse_filter = 2
 scroll_following = true
 
 [connection signal="pressed" from="CanvasLayer/UI/VBox/Buttons/FightButton" to="." method="_on_fight_pressed"]
