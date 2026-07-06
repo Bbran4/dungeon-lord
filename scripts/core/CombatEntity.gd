@@ -9,6 +9,11 @@ signal died(entity: CombatEntity)
 @export var armor: int = 0
 @export var attack_speed: float = 1.0
 
+## Special abilities beyond the implicit basic attack (see
+## get_combat_abilities). Authored on HeroData/MonsterData and passed
+## in via configure().
+@export var abilities: Array[AbilityData] = []
+
 var current_health: int = 0
 
 ## Cumulative raw damage this entity has taken (post-armor), across its
@@ -44,9 +49,16 @@ const SEPARATION_STRENGTH: float = 250.0
 
 var _attack_tween: Tween
 
+## Auto-generated from damage/attack_speed - always available, always
+## rebuilt whenever those stats change via configure(). Authored
+## `abilities` only needs to list SPECIAL abilities (Taunt, Buff, Heal,
+## etc.) on top of this.
+var _basic_attack_ability: AbilityData
+
 
 func _ready() -> void:
 	current_health = max_health
+	_rebuild_basic_attack_ability()
 
 
 func _process(delta: float) -> void:
@@ -55,29 +67,47 @@ func _process(delta: float) -> void:
 
 ## Sets stats and resets current_health accordingly. Safe to call before
 ## or after the node enters the tree.
-func configure(new_max_health: int, new_damage: int, new_armor: int) -> void:
+func configure(new_max_health: int, new_damage: int, new_armor: int, new_abilities: Array[AbilityData] = []) -> void:
 	max_health = new_max_health
 	damage = new_damage
 	armor = new_armor
 	current_health = max_health
 	damage_taken = 0
 	healing_received = 0
+	abilities = new_abilities
+	_rebuild_basic_attack_ability()
 
 
-## Returns the mitigated damage actually dealt (0 if target is null),
-## so callers - namely CombatManager's threat/aggro tracking - can react
-## to how much damage actually landed. Also triggers the visual lunge
-## toward the target.
+## The implicit basic attack plus any authored special abilities. This
+## is what CombatManager picks randomly from each time this entity is
+## off cooldown and ready to act.
+func get_combat_abilities() -> Array[AbilityData]:
+	var list: Array[AbilityData] = [_basic_attack_ability]
+	list.append_array(abilities)
+	return list
+
+
+## Deals `damage` to target via the implicit basic attack. Convenience
+## wrapper around attack_with_amount() for external callers (e.g. the
+## TestHarness sandbox fight) that don't go through CombatManager.
 func attack(target: CombatEntity) -> int:
+	return attack_with_amount(target, damage)
+
+
+## Returns the mitigated damage actually dealt (0 if target is null).
+## Used by both the basic attack and any Attack-type special ability
+## (a future Ranger arrow, etc.), so lunge + damage + threat-tracking
+## behave identically regardless of which ability triggered them.
+func attack_with_amount(target: CombatEntity, amount: int) -> int:
 	if target == null:
 		return 0
 
 	_play_attack_lunge(target.global_position)
 
-	return target.take_damage(damage)
+	return target.take_damage(amount)
 
 
-## Returns the mitigated damage actually applied, for the same reason.
+## Returns the mitigated damage actually applied.
 func take_damage(amount: int, ignore_armor: bool = false) -> int:
 
 	var mitigated: int = amount if ignore_armor else amount - armor
@@ -95,8 +125,6 @@ func take_damage(amount: int, ignore_armor: bool = false) -> int:
 
 
 ## Restores health (capped at max_health) and records the amount healed.
-## No ability calls this yet - it exists so future Healer behavior can
-## hook in without touching the gold-reward math later.
 func heal(amount: int) -> void:
 	if amount <= 0:
 		return
@@ -116,6 +144,15 @@ func effective_max_health() -> int:
 func die() -> void:
 	died.emit(self)
 	queue_free()
+
+
+func _rebuild_basic_attack_ability() -> void:
+
+	_basic_attack_ability = AbilityData.new()
+	_basic_attack_ability.ability_name = "Attack"
+	_basic_attack_ability.ability_type = "Attack"
+	_basic_attack_ability.cooldown = 1.0 / attack_speed if attack_speed > 0.0 else 1.0
+	_basic_attack_ability.magnitude = damage
 
 
 ## Tweens the visual Body a short distance toward the target and back.

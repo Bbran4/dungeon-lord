@@ -105,12 +105,12 @@ func _on_fight_pressed() -> void:
 	var hero_entity: CombatEntity = CombatEntity.new()
 	hero_entity.name = "Hero_Sandbox"
 	add_child(hero_entity)
-	hero_entity.configure(test_hero_data.max_health, test_hero_data.damage, test_hero_data.armor)
+	hero_entity.configure(test_hero_data.max_health, test_hero_data.damage, test_hero_data.armor, test_hero_data.abilities)
 
 	var monster_entity: CombatEntity = CombatEntity.new()
 	monster_entity.name = "Monster_Sandbox"
 	add_child(monster_entity)
-	monster_entity.configure(skeleton_room_data.monster.max_health, skeleton_room_data.monster.damage, skeleton_room_data.monster.armor)
+	monster_entity.configure(skeleton_room_data.monster.max_health, skeleton_room_data.monster.damage, skeleton_room_data.monster.armor, skeleton_room_data.monster.abilities)
 
 	hero_entity.died.connect(_on_combatant_died)
 	monster_entity.died.connect(_on_combatant_died)

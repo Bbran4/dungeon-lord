@@ -11,6 +11,6 @@ class_name MonsterData
 
 @export var attack_speed : float = 1.0
 
-@export var abilities : Array[String]
+@export var abilities : Array[AbilityData]
 
 @export var sprite : Texture2D

@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="AbilityData" format=3 uid="uid://c6t4vsjnt5f7t"]
+
+[ext_resource type="Script" uid="uid://gwfofjo7s5bk" path="res://scripts/abilities/AbilityData.gd" id="1_b4j1d"]
+
+[resource]
+script = ExtResource("1_b4j1d")
+ability_name = "Chain Heal"
+ability_type = "ChainHeal"
+target_rule = "LowestHpAlly"
+cooldown = 9.0
+magnitude = 8
+chain_count = 2
+metadata/_custom_type_script = "uid://gwfofjo7s5bk"

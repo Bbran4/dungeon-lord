@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="AbilityData" format=3 uid="uid://uqv4ujb2wkd1"]
+
+[ext_resource type="Script" uid="uid://gwfofjo7s5bk" path="res://scripts/abilities/AbilityData.gd" id="1_14tww"]
+
+[resource]
+script = ExtResource("1_14tww")
+ability_name = "Taunt"
+ability_type = "Taunt"
+cooldown = 8.0
+duration = 4.0
+metadata/_custom_type_script = "uid://gwfofjo7s5bk"

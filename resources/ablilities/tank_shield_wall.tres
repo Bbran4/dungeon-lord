@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="AbilityData" format=3 uid="uid://brc3l88a2s3v6"]
+
+[ext_resource type="Script" uid="uid://gwfofjo7s5bk" path="res://scripts/abilities/AbilityData.gd" id="1_4p6h4"]
+
+[resource]
+script = ExtResource("1_4p6h4")
+ability_name = "Shield Wall"
+ability_type = "Buff"
+cooldown = 10.0
+magnitude = 4
+duration = 6.0
+metadata/_custom_type_script = "uid://gwfofjo7s5bk"

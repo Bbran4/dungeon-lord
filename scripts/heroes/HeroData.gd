@@ -11,7 +11,7 @@ class_name HeroData
 
 @export var attack_speed : float = 1.0
 
-@export var abilities : Array[String]
+@export var abilities : Array[AbilityData]
 
 @export_enum("Tank","Healer","Mage","Ranger","Rogue")
 var class_type : String = "Tank"

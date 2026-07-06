@@ -1,6 +1,9 @@
 [gd_resource type="Resource" script_class="HeroData" format=3 uid="uid://ditq6i4hyf4kn"]
 
 [ext_resource type="Script" uid="uid://cjwm4rv0y2emj" path="res://scripts/heroes/HeroData.gd" id="1_4u0d0"]
+[ext_resource type="Script" uid="uid://gwfofjo7s5bk" path="res://scripts/abilities/AbilityData.gd" id="1_gay4i"]
+[ext_resource type="Resource" uid="uid://brc3l88a2s3v6" path="res://resources/ablilities/tank_shield_wall.tres" id="2_81pec"]
+[ext_resource type="Resource" uid="uid://uqv4ujb2wkd1" path="res://resources/ablilities/tank_taunt.tres" id="3_h7r73"]
 
 [resource]
 script = ExtResource("1_4u0d0")
@@ -9,5 +12,6 @@ max_health = 40
 damage = 3
 armor = 3
 attack_speed = 0.8
+abilities = Array[ExtResource("1_gay4i")]([ExtResource("2_81pec"), ExtResource("3_h7r73")])
 gold_value = 30
 metadata/_custom_type_script = "uid://cjwm4rv0y2emj"

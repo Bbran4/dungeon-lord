@@ -1,12 +1,16 @@
 [gd_resource type="Resource" script_class="HeroData" format=3 uid="uid://pqg84vdw3wfg"]
 
+[ext_resource type="Script" uid="uid://gwfofjo7s5bk" path="res://scripts/abilities/AbilityData.gd" id="1_8kpi1"]
 [ext_resource type="Script" uid="uid://cjwm4rv0y2emj" path="res://scripts/heroes/HeroData.gd" id="1_umxe2"]
+[ext_resource type="Resource" uid="uid://draqdm05yw6hc" path="res://resources/ablilities/cleric_heal.tres" id="2_o65ko"]
+[ext_resource type="Resource" uid="uid://c6t4vsjnt5f7t" path="res://resources/ablilities/cleric_chain_heal.tres" id="3_oept5"]
 
 [resource]
 script = ExtResource("1_umxe2")
 hero_name = "Cleric"
 max_health = 18
 damage = 1
+abilities = Array[ExtResource("1_8kpi1")]([ExtResource("2_o65ko"), ExtResource("3_oept5")])
 class_type = "Healer"
 priority = 1
 gold_value = 25

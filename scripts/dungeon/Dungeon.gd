@@ -111,7 +111,7 @@ func send_wave(hero_data_list: Array[HeroData]) -> void:
 
 		var hero_data: HeroData = hero_data_list[i]
 		var hero: CombatEntity = HeroManager.spawn_hero(hero_scene, self) as CombatEntity
-		hero.configure(hero_data.max_health, hero_data.damage, hero_data.armor)
+		hero.configure(hero_data.max_health, hero_data.damage, hero_data.armor, hero_data.abilities)
 		hero.name = "Hero_%s" % hero_data.hero_name
 
 		var offset: Vector2 = offsets[i]
@@ -287,9 +287,9 @@ func _spawn_monster_group(room_data: RoomData, at_position: Vector2) -> Array[Co
 
 		var monster: CombatEntity = monster_scene.instantiate() as CombatEntity
 		monster.name = "Monster_%s_%d" % [room_data.monster.monster_name, i + 1]
-		
+
 		add_child(monster)
-		monster.configure(room_data.monster.max_health, room_data.monster.damage, room_data.monster.armor)
+		monster.configure(room_data.monster.max_health, room_data.monster.damage, room_data.monster.armor, room_data.monster.abilities)
 		monster.position = at_position + Vector2(0, (i - (count - 1) / 2.0) * 40.0)
 
 		if monster.has_node("Body/Label"):
