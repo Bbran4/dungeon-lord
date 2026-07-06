@@ -3,7 +3,6 @@
 [ext_resource type="Script" uid="uid://frro8y1t7glr" path="res://scripts/test/TestHarness.gd" id="1"]
 [ext_resource type="PackedScene" uid="uid://ceru4x7efje2x" path="res://scenes/dungeons/Dungeon.tscn" id="2"]
 [ext_resource type="Script" uid="uid://3g675dniieyx" path="res://scripts/rooms/RoomCard.gd" id="3"]
-[ext_resource type="Script" uid="uid://b713taiioqa23" path="res://scripts/core/PanZoomCamera.gd" id="3_senuj"]
 
 [node name="TestHarness" type="Node2D" unique_id=1615119598]
 script = ExtResource("1")
@@ -11,8 +10,7 @@ script = ExtResource("1")
 [node name="Dungeon" parent="." unique_id=1831605470 instance=ExtResource("2")]
 
 [node name="Camera2D" type="Camera2D" parent="." unique_id=722064096]
-position = Vector2(0, -100)
-script = ExtResource("3_senuj")
+position = Vector2(575, 50)
 
 [node name="CanvasLayer" type="CanvasLayer" parent="." unique_id=2078051186]
 
@@ -29,8 +27,8 @@ mouse_filter = 2
 layout_mode = 0
 offset_left = 20.0
 offset_top = 20.0
-offset_right = 1127.0
-offset_bottom = 468.0
+offset_right = 420.0
+offset_bottom = 520.0
 
 [node name="GoldLabel" type="Label" parent="CanvasLayer/UI/VBox" unique_id=75361414]
 layout_mode = 2
@@ -82,8 +80,6 @@ text = "Reset Test"
 [node name="LogText" type="RichTextLabel" parent="CanvasLayer/UI/VBox" unique_id=376109124]
 custom_minimum_size = Vector2(400, 260)
 layout_mode = 2
-size_flags_horizontal = 8
-size_flags_vertical = 0
 scroll_following = true
 
 [connection signal="pressed" from="CanvasLayer/UI/VBox/Buttons/FightButton" to="." method="_on_fight_pressed"]

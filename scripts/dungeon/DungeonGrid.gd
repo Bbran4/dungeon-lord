@@ -17,6 +17,8 @@ signal room_selected(index: int, room: Room)
 @export var room_size: Vector2 = Vector2(500, 500)
 @export var gap_width: float = 20.0
 
+const MARKER_COLOR: Color = Color(0.15, 0.15, 0.15, 1.0)
+
 var room_nodes: Array[Room] = []
 var gap_zones: Array[RoomGapZone] = []
 var entrance_marker: Node2D
@@ -217,8 +219,8 @@ func _add_gap_zone(insert_index: int) -> void:
 
 	var seam_x: float = (_slot_center_x(insert_index) + _slot_center_x(insert_index + 1)) * 0.5
 
-	zone.size = Vector2(gap_zone_width, room_size.y)
-	zone.position = Vector2(seam_x - gap_zone_width * 0.5, room_size.y * -0.5)
+	zone.size = Vector2(gap_width, room_size.y)
+	zone.position = Vector2(seam_x - gap_width * 0.5, room_size.y * -0.5)
 	zone.drop_requested.connect(_on_gap_drop_requested)
 
 	add_child(zone)
