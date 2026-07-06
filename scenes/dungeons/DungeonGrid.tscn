@@ -1,8 +1,10 @@
 [gd_scene format=3 uid="uid://dwsggd0e6chrl"]
 
-[ext_resource type="Script" uid="uid://4v3kabypkdfx" path="res://scripts/dungeon/DungeonGrid.gd" id="1_uq0s7"]
-[ext_resource type="PackedScene" uid="uid://hostf1xjginq" path="res://scenes/rooms/Room.tscn" id="2_3a03g"]
+[ext_resource type="Script" uid="uid://4v3kabypkdfx" path="res://scripts/dungeon/DungeonGrid.gd" id="1"]
+[ext_resource type="PackedScene" uid="uid://hostf1xjginq" path="res://scenes/rooms/Room.tscn" id="2"]
 
 [node name="DungeonGrid" type="Node2D" unique_id=997918969]
-script = ExtResource("1_uq0s7")
-room_scene = ExtResource("2_3a03g")
+script = ExtResource("1")
+room_scene = ExtResource("2")
+columns = 3
+cell_size = Vector2(600, 600)
