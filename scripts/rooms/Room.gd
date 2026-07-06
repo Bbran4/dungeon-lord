@@ -11,6 +11,7 @@ var hero: Node = null
 
 @onready var upgrade_zone: RoomUpgradeZone = $UpgradeZone
 @onready var sell_button: Button = $SellButton
+@onready var monster_label: Label = $MonsterLabel
 
 
 func _ready() -> void:
@@ -30,9 +31,18 @@ func update_visuals() -> void:
 
 	if room_data == null:
 		$Label.text = "Empty"
+		monster_label.text = ""
+		monster_label.visible = false
 		return
 
 	$Label.text = room_data.room_name
+
+	if room_data.monster != null:
+		monster_label.text = room_data.monster.monster_name
+		monster_label.visible = true
+	else:
+		monster_label.text = ""
+		monster_label.visible = false
 
 
 func show_upgrade_prompt(room_index: int, room_name: String) -> void:

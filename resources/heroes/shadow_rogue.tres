@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="HeroData" format=3 uid="uid://caiy4bqh2vn3o"]
+
+[ext_resource type="Script" uid="uid://cjwm4rv0y2emj" path="res://scripts/heroes/HeroData.gd" id="1_a40cq"]
+
+[resource]
+script = ExtResource("1_a40cq")
+hero_name = "Rogue"
+max_health = 15
+damage = 5
+armor = 1
+attack_speed = 1.4
+class_type = "Rogue"
+priority = 3
+gold_value = 25
+metadata/_custom_type_script = "uid://cjwm4rv0y2emj"

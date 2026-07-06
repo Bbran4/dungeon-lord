@@ -8,6 +8,11 @@
 [ext_resource type="Script" uid="uid://b713taiioqa23" path="res://scripts/core/PanZoomCamera.gd" id="3_senuj"]
 [ext_resource type="Resource" uid="uid://chchsnnehw48r" path="res://resources/heroes/test_adventurer.tres" id="4_2sunf"]
 [ext_resource type="Resource" uid="uid://bol2exvqplv0u" path="res://resources/rooms/spike_corridor.tres" id="4_igh42"]
+[ext_resource type="Resource" uid="uid://ditq6i4hyf4kn" path="res://resources/heroes/tank_knight.tres" id="6_iwcrh"]
+[ext_resource type="Resource" uid="uid://pqg84vdw3wfg" path="res://resources/heroes/cleric_healer.tres" id="7_cun6h"]
+[ext_resource type="Resource" uid="uid://bi6f5sc2hj8js" path="res://resources/heroes/ranger_scout.tres" id="8_whyqk"]
+[ext_resource type="Resource" uid="uid://cboygfugp7xf4" path="res://resources/heroes/battle_mage.tres" id="9_55fa2"]
+[ext_resource type="Resource" uid="uid://caiy4bqh2vn3o" path="res://resources/heroes/shadow_rogue.tres" id="10_l2txw"]
 
 [node name="TestHarness" type="Node2D" unique_id=1615119598]
 script = ExtResource("1")
@@ -15,6 +20,11 @@ skeleton_room_data = ExtResource("2_enmk8")
 skeleton_room_upgraded_data = ExtResource("3_igh42")
 spike_corridor_room_data = ExtResource("4_igh42")
 test_hero_data = ExtResource("4_2sunf")
+tank_hero_data = ExtResource("6_iwcrh")
+healer_hero_data = ExtResource("7_cun6h")
+ranger_hero_data = ExtResource("8_whyqk")
+mage_hero_data = ExtResource("9_55fa2")
+rogue_hero_data = ExtResource("10_l2txw")
 
 [node name="Dungeon" parent="." unique_id=1831605470 instance=ExtResource("2")]
 

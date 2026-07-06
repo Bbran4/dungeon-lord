@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="HeroData" format=3 uid="uid://cboygfugp7xf4"]
+
+[ext_resource type="Script" uid="uid://cjwm4rv0y2emj" path="res://scripts/heroes/HeroData.gd" id="1_dnq5u"]
+
+[resource]
+script = ExtResource("1_dnq5u")
+hero_name = "Battlemage"
+max_health = 14
+damage = 7
+class_type = "Mage"
+priority = 2
+gold_value = 25
+metadata/_custom_type_script = "uid://cjwm4rv0y2emj"

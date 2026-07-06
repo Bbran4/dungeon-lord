@@ -37,7 +37,11 @@ class_name TestHarness
 @export var skeleton_room_upgraded_data: RoomData
 @export var spike_corridor_room_data: RoomData
 @export var test_hero_data: HeroData
-
+@export var tank_hero_data: HeroData
+@export var healer_hero_data: HeroData
+@export var ranger_hero_data: HeroData
+@export var mage_hero_data: HeroData
+@export var rogue_hero_data: HeroData
 
 func _ready() -> void:
 	_connect_signals()
@@ -114,6 +118,33 @@ func _on_fight_pressed() -> void:
 	if is_instance_valid(monster_entity):
 		monster_entity.queue_free()
 
+## Builds a randomized test party: a guaranteed Tank, Healer, and one DPS
+## (Mage or Ranger, chosen at random), plus a 4th member of a random
+## class drawn from the full roster. Exists to exercise
+## Dungeon.send_wave() with more than one hero.
+##
+## IMPORTANT: each hero still moves through the dungeon and fights
+## independently once spawned - there is no in-party coordination yet.
+## The Healer's "heal" entry in `abilities` is data only; nothing calls
+## CombatEntity.heal() on anyone else's behalf. A Tank doesn't "tank" for
+## the party either - every hero fights every room's monster on their
+## own. Real party behavior (a Healer keeping a Tank alive, a Tank being
+## targeted first, etc.) needs Milestone 4 (Hero Parties / Party AI).
+func _build_test_party() -> Array[HeroData]:
+
+	var dps_pool: Array[HeroData] = [ranger_hero_data, mage_hero_data]
+	var dps: HeroData = dps_pool[randi() % dps_pool.size()]
+
+	var party: Array[HeroData] = [tank_hero_data, healer_hero_data, dps]
+
+	var full_roster: Array[HeroData] = [
+		tank_hero_data, healer_hero_data, ranger_hero_data, mage_hero_data, rogue_hero_data
+	]
+	party.append(full_roster[randi() % full_roster.size()])
+
+	return party
+
+
 
 func _on_send_wave_pressed() -> void:
 
@@ -122,8 +153,15 @@ func _on_send_wave_pressed() -> void:
 		return
 
 	GameManager.start_combat_phase()
-	_log("Sending test hero into the dungeon...")
-	dungeon.send_wave([test_hero_data])
+
+	var party: Array[HeroData] = _build_test_party()
+	var names: Array[String] = []
+
+	for hero_data: HeroData in party:
+		names.append("%s (%s)" % [hero_data.hero_name, hero_data.class_type])
+
+	_log("Sending party: %s" % ", ".join(names))
+	dungeon.send_wave(party)
 
 
 func _on_hero_escaped(hero: CombatEntity) -> void:

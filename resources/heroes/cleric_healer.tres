@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="HeroData" format=3 uid="uid://pqg84vdw3wfg"]
+
+[ext_resource type="Script" uid="uid://cjwm4rv0y2emj" path="res://scripts/heroes/HeroData.gd" id="1_umxe2"]
+
+[resource]
+script = ExtResource("1_umxe2")
+hero_name = "Cleric"
+max_health = 18
+damage = 1
+class_type = "Healer"
+priority = 1
+gold_value = 25
+metadata/_custom_type_script = "uid://cjwm4rv0y2emj"
