@@ -3,14 +3,12 @@ class_name AbilityData
 
 @export var ability_name : String
 
-@export_enum("Attack", "Heal", "ChainHeal", "Buff", "Taunt")
-var ability_type : String = "Attack"
+@export var ability_type : GameEnums.AbilityType = GameEnums.AbilityType.ATTACK
 
 ## Only relevant for Heal/ChainHeal/Buff/Taunt - Attack-type abilities
 ## always target using CombatManager's built-in enemy-targeting rules
 ## (random for heroes, highest-threat-with-taunt-override for monsters).
-@export_enum("LowestHpAlly", "Self")
-var target_rule : String = "Self"
+@export var target_rule : GameEnums.AbilityTargetRule = GameEnums.AbilityTargetRule.SELF
 
 @export var cooldown : float = 4.0
 

@@ -5,7 +5,7 @@
 [resource]
 script = ExtResource("1_14tww")
 ability_name = "Taunt"
-ability_type = "Taunt"
+ability_type = 4
 cooldown = 8.0
 duration = 4.0
 metadata/_custom_type_script = "uid://gwfofjo7s5bk"

@@ -17,9 +17,26 @@ extends Node
 ## BUFFS (armor bonuses) are applied immediately and tracked for the
 ## rest of the encounter; anything still active when the encounter ends
 ## is force-reverted so nothing leaks into the next room.
+##
+## TAUNTS are tracked the same way, with one extra wrinkle: a taunt must
+## be cleared the instant its owner dies, not just when its duration
+## expires - otherwise a monster can be left hard-locked onto a dead
+## hero. _expire_taunts checks liveness every tick for exactly this
+## reason. Dictionary.keys() returns an untyped Array, so iterating it
+## with a strictly-typed `for hero: CombatEntity in ...` performs a
+## checked cast per element that CRASHES if that element is a genuinely
+## freed object - so both taunt-cleanup functions iterate untyped and
+## check is_instance_valid() before treating anything as a CombatEntity.
+##
+## ability_used emits a plain human-readable String (not CombatEntity
+## references) every time any actor executes any ability, plus when a
+## taunt expires - this is what lets TestHarness (or anything else)
+## narrate combat into a log without ever touching a possibly-freed
+## entity itself.
 
 signal group_combat_started(heroes: Array[CombatEntity], monsters: Array[CombatEntity])
 signal group_combat_finished(heroes_won: bool)
+signal ability_used(message: String)
 
 ## Simulation clock granularity, not a stat - each combatant's own
 ## ability cooldowns still determine how often THEY personally act.
@@ -100,6 +117,14 @@ func _living_only(group: Array[CombatEntity]) -> Array[CombatEntity]:
 	return living
 
 
+## Safe to call on anything, including a possibly-freed reference -
+## never touches .name unless is_instance_valid() confirms it's safe.
+func _describe(entity: Variant) -> String:
+	if entity != null and is_instance_valid(entity):
+		return entity.name
+	return "???"
+
+
 func _tick_actor(
 	actor: CombatEntity,
 	allies: Array[CombatEntity],
@@ -151,15 +176,18 @@ func _execute_ability(
 	is_monster_side: bool
 ) -> void:
 
+	var actor_name: String = _describe(actor)
+
 	match ability.ability_type:
 
-		"Attack":
+		GameEnums.AbilityType.ATTACK:
 
 			var target: CombatEntity = _pick_enemy_target(actor, enemies, threat_table, active_taunts, elapsed_time, is_monster_side)
 
 			if target == null:
 				return
 
+			var target_name: String = _describe(target)
 			var dealt: int = actor.attack_with_amount(target, ability.magnitude)
 
 			if is_instance_valid(target) and threat_table.has(target):
@@ -167,14 +195,19 @@ func _execute_ability(
 				monster_threat[actor] = monster_threat.get(actor, 0.0) + float(dealt)
 				threat_table[target] = monster_threat
 
-		"Heal":
+			var via: String = " (%s)" % ability.ability_name if ability.ability_name != "Attack" else ""
+			ability_used.emit("%s attacks %s%s for %d" % [actor_name, target_name, via, dealt])
+
+		GameEnums.AbilityType.HEAL:
 
 			var target: CombatEntity = _pick_ally_target(ability.target_rule, actor, allies)
 
 			if target != null and is_instance_valid(target):
+				var target_name: String = _describe(target)
 				target.heal(ability.magnitude)
+				ability_used.emit("%s casts %s on %s for %d" % [actor_name, ability.ability_name, target_name, ability.magnitude])
 
-		"ChainHeal":
+		GameEnums.AbilityType.CHAIN_HEAL:
 
 			var living: Array[CombatEntity] = _living_only(allies)
 
@@ -183,29 +216,41 @@ func _execute_ability(
 
 			living.sort_custom(func(a: CombatEntity, b: CombatEntity) -> bool: return a.current_health < b.current_health)
 
+			var primary_name: String = _describe(living[0])
 			living[0].heal(ability.magnitude)
 
 			var extra: int = mini(ability.chain_count, living.size() - 1)
+			var extra_names: Array[String] = []
 
 			for i: int in range(1, extra + 1):
 				living[i].heal(int(round(ability.magnitude * CHAIN_HEAL_FALLOFF)))
+				extra_names.append(_describe(living[i]))
 
-		"Buff":
+			var summary: String = primary_name
+			if not extra_names.is_empty():
+				summary += " + " + ", ".join(extra_names)
+
+			ability_used.emit("%s casts %s on %s" % [actor_name, ability.ability_name, summary])
+
+		GameEnums.AbilityType.BUFF:
 
 			var target: CombatEntity = _pick_ally_target(ability.target_rule, actor, allies)
 
 			if target != null and is_instance_valid(target):
+				var target_name: String = _describe(target)
 				target.armor += ability.magnitude
 				active_buffs.append({
 					"entity": target,
 					"amount": ability.magnitude,
 					"expires_at": elapsed_time + ability.duration,
 				})
+				ability_used.emit("%s casts %s on %s (+%d armor for %.1fs)" % [actor_name, ability.ability_name, target_name, ability.magnitude, ability.duration])
 
-		"Taunt":
+		GameEnums.AbilityType.TAUNT:
 
 			active_taunts[actor] = elapsed_time + ability.duration
 			actor.set_taunting(true)
+			ability_used.emit("%s casts %s! (%.1fs)" % [actor_name, ability.ability_name, ability.duration])
 
 
 ## Attack-type target selection: random living monster for heroes;
@@ -237,11 +282,11 @@ func _pick_enemy_target(
 
 
 ## Ally-targeted rule for Heal/ChainHeal/Buff/Taunt abilities.
-func _pick_ally_target(rule: String, actor: CombatEntity, allies: Array[CombatEntity]) -> CombatEntity:
+func _pick_ally_target(rule: GameEnums.AbilityTargetRule, actor: CombatEntity, allies: Array[CombatEntity]) -> CombatEntity:
 
 	match rule:
 
-		"LowestHpAlly":
+		GameEnums.AbilityTargetRule.LOWEST_HP_ALLY:
 
 			var living: Array[CombatEntity] = _living_only(allies)
 
@@ -309,18 +354,40 @@ func _expire_buffs(active_buffs: Array, elapsed_time: float) -> void:
 	active_buffs.clear()
 	active_buffs.append_array(remaining)
 
+
+## Removes a taunt the instant EITHER its duration has run out OR its
+## owner is no longer alive - dying clears the taunt immediately rather
+## than waiting for it to time out on its own, which is what left
+## monsters hard-locked onto a dead hero before this fix. Iterates
+## active_taunts.keys() untyped (see file-level note) since a dead
+## hero's key may already be a genuinely freed object. Emits a log line
+## either way, distinguishing "faded" (timed out) from "ended" (owner
+## died), so it's visible in the log why a taunt stopped.
 func _expire_taunts(active_taunts: Dictionary, elapsed_time: float) -> void:
 
 	var expired: Array = []
 
-	for hero: CombatEntity in active_taunts.keys():
-		if elapsed_time >= active_taunts[hero]:
-			expired.append(hero)
+	for hero in active_taunts.keys():
 
-	for hero: CombatEntity in expired:
+		var still_alive: bool = is_instance_valid(hero) and not hero.is_queued_for_deletion() and hero.current_health > 0
+
+		if not still_alive:
+			expired.append({"hero": hero, "reason": "died"})
+		elif elapsed_time >= active_taunts[hero]:
+			expired.append({"hero": hero, "reason": "faded"})
+
+	for entry: Dictionary in expired:
+
+		var hero = entry["hero"]
+
 		active_taunts.erase(hero)
+
 		if is_instance_valid(hero):
 			hero.set_taunting(false)
+			ability_used.emit("%s's Taunt %s" % [_describe(hero), entry["reason"]])
+		else:
+			ability_used.emit("A Taunt ended (source died)")
+
 
 func _revert_all_buffs(active_buffs: Array) -> void:
 
@@ -330,9 +397,10 @@ func _revert_all_buffs(active_buffs: Array) -> void:
 
 	active_buffs.clear()
 
+
 func _revert_all_taunts(active_taunts: Dictionary) -> void:
 
-	for hero: CombatEntity in active_taunts.keys():
+	for hero in active_taunts.keys():
 		if is_instance_valid(hero):
 			hero.set_taunting(false)
 

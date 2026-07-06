@@ -186,7 +186,7 @@ func _rebuild_basic_attack_ability() -> void:
 
 	_basic_attack_ability = AbilityData.new()
 	_basic_attack_ability.ability_name = "Attack"
-	_basic_attack_ability.ability_type = "Attack"
+	_basic_attack_ability.ability_type = GameEnums.AbilityType.ATTACK
 	_basic_attack_ability.cooldown = 1.0 / attack_speed if attack_speed > 0.0 else 1.0
 	_basic_attack_ability.magnitude = damage
 

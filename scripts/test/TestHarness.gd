@@ -54,6 +54,7 @@ func _ready() -> void:
 
 func _connect_signals() -> void:
 	EconomyManager.gold_changed.connect(_on_gold_changed)
+	CombatManager.ability_used.connect(_on_ability_used)
 	WaveManager.wave_started.connect(_on_wave_started)
 	WaveManager.wave_completed.connect(_on_wave_completed)
 	CombatManager.group_combat_finished.connect(_on_group_combat_finished)
@@ -237,6 +238,8 @@ func _on_reward_phase_started() -> void:
 func _on_trap_triggered(hero: CombatEntity, trap_data: TrapData) -> void:
 	_log("%s triggered %s!" % [hero.name, trap_data.trap_name])
 
+func _on_ability_used(message: String) -> void:
+	_log(message)
 
 func _log(message: String) -> void:
 	log_text.append_text(message + "\n")

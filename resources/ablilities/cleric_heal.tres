@@ -5,8 +5,7 @@
 [resource]
 script = ExtResource("1_kco7x")
 ability_name = "Heal"
-ability_type = "Heal"
-target_rule = "LowestHpAlly"
+ability_type = 1
 cooldown = 3.0
 magnitude = 10
 metadata/_custom_type_script = "uid://gwfofjo7s5bk"

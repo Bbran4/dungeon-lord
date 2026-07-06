@@ -5,8 +5,7 @@
 [resource]
 script = ExtResource("1_b4j1d")
 ability_name = "Chain Heal"
-ability_type = "ChainHeal"
-target_rule = "LowestHpAlly"
+ability_type = 2
 cooldown = 9.0
 magnitude = 8
 chain_count = 2

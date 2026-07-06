@@ -5,7 +5,7 @@
 [resource]
 script = ExtResource("1_4p6h4")
 ability_name = "Shield Wall"
-ability_type = "Buff"
+ability_type = 3
 cooldown = 10.0
 magnitude = 4
 duration = 6.0

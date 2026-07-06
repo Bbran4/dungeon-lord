@@ -34,3 +34,16 @@ enum GameState {
 	REWARD,
 	GAME_OVER
 }
+
+enum AbilityType {
+	ATTACK,
+	HEAL,
+	CHAIN_HEAL,
+	BUFF,
+	TAUNT
+}
+
+enum AbilityTargetRule {
+	LOWEST_HP_ALLY,
+	SELF
+}
