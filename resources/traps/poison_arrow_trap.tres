@@ -7,4 +7,6 @@ script = ExtResource("1_w6c40")
 trap_name = "Poison Arrow Trap"
 damage = 4
 trap_type = 1
+projectile_cooldown = 1.0
+max_concurrent_arrows = 2
 metadata/_custom_type_script = "uid://ipo3kb65irpf"

@@ -8,9 +8,13 @@ class_name TrapArrow
 ## reaches the room's far wall. Either outcome deactivates the arrow
 ## (hidden, process stopped) rather than freeing it, so the owning
 ## controller can recycle it from a pool.
+##
+## Emits a SINGLE `resolved` signal either way (hero on a hit, null on
+## a wall miss) rather than two separate signals - this is what lets a
+## caller just `await arrow.resolved` directly with no manual
+## connect/disconnect bookkeeping.
 
-signal hit_target(hero: CombatEntity)
-signal hit_wall
+signal resolved(hero: CombatEntity)
 
 @onready var _area: Area2D = $Area2D
 
@@ -50,7 +54,7 @@ func _process(delta: float) -> void:
 
 	if position.y >= _wall_y:
 		_deactivate()
-		hit_wall.emit()
+		resolved.emit(null)
 
 
 func _on_area_entered(area: Area2D) -> void:
@@ -69,7 +73,7 @@ func _on_area_entered(area: Area2D) -> void:
 		return
 
 	_deactivate()
-	hit_target.emit(other)
+	resolved.emit(other)
 
 
 func _deactivate() -> void:

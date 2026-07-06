@@ -5,12 +5,14 @@ class_name Dungeon
 ## and resolves each room as a GROUP encounter via
 ## CombatManager.begin_group_combat.
 ##
-## Room monsters are spawned up front, all at once, when the wave
-## starts - not lazily when the party happens to arrive. Each room's
-## monster group sits visibly at that room's position for the whole
-## wave (tracked in _room_monsters, keyed by room index) until the
-## party reaches it and fights, or the wave ends and any never-reached
-## room's monsters are cleaned up. Monsters never move from their room.
+## Room monsters AND projectile traps are both spawned up front, all at
+## once, when the wave starts - not lazily when the party happens to
+## arrive. A room's monster group and any PoisonArrowTrapController both
+## sit/run at that room's position for the whole wave, regardless of
+## where the party currently is, until the wave ends and everything
+## still standing is cleaned up. Entering a projectile-trap room does
+## NOT trigger anything - the trap has already been firing on its own
+## cooldown(s) since the wave began.
 ##
 ## Heroes are positioned using a class-based FORMATION rather than
 ## simple spawn order: Tank at the front (closest to the monster line),
@@ -22,12 +24,10 @@ class_name Dungeon
 ## this is what gives a PROJECTILE trap more chances to land a hit,
 ## since the party lingers in the arrow's path longer.
 ##
-## PROJECTILE TRAPS: a PoisonArrowTrapController is spawned right before
-## the party starts moving toward a room with a PROJECTILE-type trap,
-## and freed right after that room is fully resolved - it fires pooled
-## TrapArrow projectiles continuously for that whole window. INSTANT
-## traps are unaffected and still resolve as a single probabilistic hit
-## per hero on arrival.
+## INSTANT traps still resolve as a single probabilistic hit per hero
+## right when the party arrives, same as before. PROJECTILE traps are
+## entirely decoupled from party position - see
+## PoisonArrowTrapController.
 ##
 ## UTILITY ROOMS: arriving at a room with room_type == "Utility" applies
 ## its one-time/ongoing effects via _apply_utility_room - optionally
@@ -83,7 +83,12 @@ signal wave_cleared(full_wipe: bool)
 ## monsters more exposure time.
 @export var room_danger_speed_multiplier: float = 0.5
 
-@export var arrow_pool_size: int = 6
+## Size of the SHARED arrow pool across ALL projectile traps in the
+## dungeon at once - since every projectile trap now fires for the
+## whole wave regardless of party position, this should comfortably
+## cover the sum of max_concurrent_arrows across every projectile-trap
+## room you expect to have built at once.
+@export var arrow_pool_size: int = 12
 
 ## Forward (x, relative to the party's shared waypoint) offset per
 ## class_type. Positive = further along the path, i.e. closer to
@@ -109,11 +114,15 @@ var _heroes_died_count: int = 0
 ## (already scaled by the wave multiplier at spawn time), "resolved": bool}
 var _party: Array[Dictionary] = []
 
-## room_index (int, matching DungeonManager's room indices) -> Array[CombatEntity].
-## Populated all at once at the start of a wave; entries are removed as
-## each room is fought, and anything left over is cleaned up when the
-## wave ends.
+## room_index -> Array[CombatEntity]. Populated all at once at the
+## start of a wave; entries are removed as each room is fought, and
+## anything left over is cleaned up when the wave ends.
 var _room_monsters: Dictionary = {}
+
+## room_index -> PoisonArrowTrapController. Populated all at once at
+## the start of a wave for every room with a PROJECTILE trap; all freed
+## together when the wave ends (see _finish_wave).
+var _room_projectile_traps: Dictionary = {}
 
 var _arrow_pool: Array[TrapArrow] = []
 
@@ -138,6 +147,7 @@ func send_wave(hero_data_list: Array[HeroData]) -> void:
 	_party.clear()
 
 	_spawn_all_room_monsters()
+	_spawn_all_projectile_traps()
 
 	var multiplier: float = WaveManager.current_stat_multiplier()
 	var offsets: Array[Vector2] = _compute_formation_offsets(hero_data_list)
@@ -211,11 +221,6 @@ func _run_party() -> void:
 		var is_dangerous: bool = room_data != null and (room_data.monster != null or room_data.trap != null)
 		var speed_multiplier: float = room_danger_speed_multiplier if is_dangerous else 1.0
 
-		var projectile_controller: PoisonArrowTrapController = null
-
-		if room_data != null and room_data.trap != null and room_data.trap.trap_type == GameEnums.TrapType.PROJECTILE:
-			projectile_controller = _spawn_projectile_trap(room_data.trap, waypoints[i])
-
 		await _move_party_to(waypoints[i], speed_multiplier)
 
 		if room_data != null and room_data.room_type == "Utility":
@@ -226,7 +231,6 @@ func _run_party() -> void:
 				_resolve_trap_for_member(member, room_data.trap)
 
 		if _living_party_entities().is_empty():
-			_free_projectile_trap(projectile_controller)
 			_finish_wave()
 			return
 
@@ -249,11 +253,8 @@ func _run_party() -> void:
 			_resolve_dead_party_members()
 
 			if _living_party_entities().is_empty():
-				_free_projectile_trap(projectile_controller)
 				_finish_wave()
 				return
-
-		_free_projectile_trap(projectile_controller)
 
 	_resolve_escaped_party()
 
@@ -360,6 +361,42 @@ func _spawn_monster_group(room_data: RoomData, at_position: Vector2) -> Array[Co
 	return monsters
 
 
+## Spawns a PoisonArrowTrapController for every room whose trap is
+## PROJECTILE-type, up front, all at once - each one starts firing
+## immediately and keeps firing on its own cooldown(s) for the rest of
+## the wave regardless of where the party currently is. Freed all at
+## once in _finish_wave, same lifecycle as room monsters.
+func _spawn_all_projectile_traps() -> void:
+
+	_clear_remaining_projectile_traps()
+	_ensure_arrow_pool()
+
+	var waypoints: Array[Vector2] = dungeon_grid.get_path_waypoints()
+	var room_count: int = DungeonManager.room_count()
+
+	for i: int in room_count:
+
+		var room_data: RoomData = DungeonManager.get_room(i)
+
+		if room_data != null and room_data.trap != null and room_data.trap.trap_type == GameEnums.TrapType.PROJECTILE:
+
+			var controller: PoisonArrowTrapController = PoisonArrowTrapController.new()
+			add_child(controller)
+			# Room i sits at waypoint index i + 1 (index 0 is the entrance).
+			controller.position = waypoints[i + 1]
+			controller.setup(room_data.trap, _arrow_pool, Callable(self, "_living_party_entities"), _trap_damage_multiplier)
+
+			var trap_data: TrapData = room_data.trap
+			controller.trap_fired.connect(func(hero: CombatEntity) -> void:
+				if is_instance_valid(hero):
+					trap_triggered.emit(hero, trap_data)
+			)
+
+			controller.start()
+
+			_room_projectile_traps[i] = controller
+
+
 func _ensure_arrow_pool() -> void:
 
 	if not _arrow_pool.is_empty() or trap_arrow_scene == null:
@@ -372,29 +409,15 @@ func _ensure_arrow_pool() -> void:
 		_arrow_pool.append(arrow)
 
 
-func _spawn_projectile_trap(trap_data: TrapData, at_position: Vector2) -> PoisonArrowTrapController:
+func _clear_remaining_projectile_traps() -> void:
 
-	_ensure_arrow_pool()
+	for key: int in _room_projectile_traps.keys():
+		var controller: PoisonArrowTrapController = _room_projectile_traps[key]
+		if is_instance_valid(controller):
+			controller.stop()
+			controller.queue_free()
 
-	var controller: PoisonArrowTrapController = PoisonArrowTrapController.new()
-	add_child(controller)
-	controller.position = at_position
-	controller.setup(trap_data, _arrow_pool, Callable(self, "_living_party_entities"), _trap_damage_multiplier)
-
-	controller.trap_fired.connect(func(hero: CombatEntity) -> void:
-		if is_instance_valid(hero):
-			trap_triggered.emit(hero, trap_data)
-	)
-
-	controller.start()
-
-	return controller
-
-
-func _free_projectile_trap(controller: PoisonArrowTrapController) -> void:
-	if controller != null and is_instance_valid(controller):
-		controller.stop()
-		controller.queue_free()
+	_room_projectile_traps.clear()
 
 
 ## Applies a Utility room's one-time/ongoing effects. Multipliers stack
@@ -496,6 +519,7 @@ func _finish_wave() -> void:
 			_handle_hero_death(member)
 
 	_clear_remaining_room_monsters()
+	_clear_remaining_projectile_traps()
 
 	var full_wipe: bool = _heroes_escaped_count == 0 and _heroes_died_count > 0
 

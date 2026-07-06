@@ -25,10 +25,16 @@ class_name TrapData
 @export var tick_interval : float = 1.0
 
 ## PROJECTILE traps only: how fast an arrow travels down the room, and
-## how long the trap waits after an arrow is destroyed (hero OR wall)
-## before firing the next one.
+## how long each firing "slot" waits after its arrow is destroyed
+## (hero OR wall) before firing its next one.
 @export var projectile_speed : float = 260.0
 @export var projectile_cooldown : float = 2.0
+
+## PROJECTILE traps only: how many arrows this trap can have in flight
+## at once, each firing independently on its own cooldown. The trap
+## fires continuously for the whole wave once it starts - regardless
+## of whether the party is anywhere near this room yet.
+@export var max_concurrent_arrows : int = 1
 
 @export var abilities : Array[String]
 
