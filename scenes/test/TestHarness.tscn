@@ -2,7 +2,7 @@
 
 [ext_resource type="Script" uid="uid://frro8y1t7glr" path="res://scripts/test/TestHarness.gd" id="1"]
 [ext_resource type="PackedScene" uid="uid://ceru4x7efje2x" path="res://scenes/dungeons/Dungeon.tscn" id="2"]
-[ext_resource type="Script" path="res://scripts/rooms/RoomCard.gd" id="3"]
+[ext_resource type="Script" uid="uid://3g675dniieyx" path="res://scripts/rooms/RoomCard.gd" id="3"]
 
 [node name="TestHarness" type="Node2D" unique_id=1615119598]
 script = ExtResource("1")

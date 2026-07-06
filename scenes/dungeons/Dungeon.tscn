@@ -8,4 +8,4 @@
 script = ExtResource("1_wao25")
 hero_scene = ExtResource("3")
 
-[node name="DungeonGrid" parent="." instance=ExtResource("2")]
+[node name="DungeonGrid" parent="." unique_id=1739853857 instance=ExtResource("2")]

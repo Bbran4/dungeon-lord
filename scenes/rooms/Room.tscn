@@ -1,7 +1,7 @@
 [gd_scene format=3 uid="uid://hostf1xjginq"]
 
-[ext_resource type="Script" path="res://scripts/rooms/Room.gd" id="1"]
-[ext_resource type="Script" path="res://scripts/rooms/RoomUpgradeZone.gd" id="2"]
+[ext_resource type="Script" uid="uid://bqiox06taklt" path="res://scripts/rooms/Room.gd" id="1"]
+[ext_resource type="Script" uid="uid://d1vwtcyn14fu5" path="res://scripts/rooms/RoomUpgradeZone.gd" id="2"]
 
 [node name="Room" type="Node2D" unique_id=1317822416]
 script = ExtResource("1")
