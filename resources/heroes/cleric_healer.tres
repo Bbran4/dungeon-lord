@@ -15,4 +15,5 @@ class_type = "Healer"
 priority = 1
 gold_value = 25
 is_melee = false
+projectile_color = Color(0.48677072, 1, 0.58383155, 1)
 metadata/_custom_type_script = "uid://cjwm4rv0y2emj"

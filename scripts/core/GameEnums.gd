@@ -40,7 +40,9 @@ enum AbilityType {
 	HEAL,
 	CHAIN_HEAL,
 	BUFF,
-	TAUNT
+	TAUNT,
+	DOT_ATTACK,
+	CHAIN_ATTACK
 }
 
 enum AbilityTargetRule {

@@ -320,9 +320,8 @@ Elite raids may contain:
 > together via `Dungeon.gd`, positioned in a class-based formation and
 > resolved as one shared encounter per room via
 > `CombatManager.begin_group_combat()` rather than each hero soloing the
-> dungeon independently. The Tank draws aggro via `Taunt` and
-> self-buffs armor; the Healer keeps the party topped up. Ranger, Mage,
-> and Rogue don't have kits yet — see Combat System.
+> dungeon independently. All five classes now have real kits — see
+> Combat System for the full breakdown.
 
 ---
 
@@ -406,7 +405,7 @@ Reflects the structure as it exists today (not the original target layout):
 res://
 
 scripts/
-	core/          # GameEnums, CombatEntity, PanZoomCamera
+	core/          # GameEnums, CombatEntity, CircleVisual, CombatProjectile, PanZoomCamera
 	dungeon/       # Dungeon, DungeonGrid
 	rooms/         # Room, RoomData, RoomCard, RoomGapZone, RoomUpgradeZone
 	heroes/        # HeroData
@@ -417,22 +416,26 @@ scripts/
 	biomes/        # BiomeData
 	cards/         # CardData
 	managers/      # GameManager, EconomyManager, WaveManager,
-	               # DungeonManager, CombatManager, HeroManager
+				   # DungeonManager, CombatManager, HeroManager
 	test/          # TestHarness (manual playtest scene driver)
 
 resources/
 	rooms/         # skeleton_den (3 tiers), spike_corridor.tres,
-	               # poison_arrow_corridor.tres, sanctuary_room.tres
+				   # poison_arrow_corridor.tres, sanctuary_room.tres
 	monsters/      # skeleton, elite_skeleton, skeleton_champion
 	traps/         # spike_trap.tres, poison_arrow_trap.tres
-	abilities/     # tank_shield_wall, tank_taunt, cleric_heal, cleric_chain_heal
+	abilities/     # tank_shield_wall, tank_taunt, cleric_heal, cleric_chain_heal,
+				   # ranger_poison_arrow, ranger_explosive_arrow, mage_fireball,
+				   # mage_chain_lightning, mage_ice_spike, rogue_poison_strike,
+				   # rogue_backstab
 	heroes/        # test_adventurer, tank_knight, cleric_healer,
-	               # ranger_scout, battle_mage, shadow_rogue
+				   # ranger_scout, battle_mage, shadow_rogue
 
 scenes/
 	dungeons/      # Dungeon.tscn, DungeonGrid.tscn
 	rooms/         # Room.tscn
 	traps/         # TrapArrow.tscn
+	effects/       # CombatProjectile.tscn
 	test/          # TestHarness.tscn, TestHeroEntity.tscn, TestMonsterEntity.tscn
 ```
 
@@ -491,12 +494,16 @@ icon : Texture2D
 
 ```
 ability_name : String
-ability_type : GameEnums.AbilityType ("Attack" | "Heal" | "ChainHeal" | "Buff" | "Taunt")
+ability_type : GameEnums.AbilityType ("Attack" | "Heal" | "ChainHeal" | "Buff" | "Taunt" | "DotAttack" | "ChainAttack")
 target_rule : GameEnums.AbilityTargetRule ("LowestHpAlly" | "Self")   # only used by Heal/ChainHeal/Buff/Taunt
 cooldown : float
 magnitude : int        # damage/heal amount, or armor bonus for Buff
 duration : float        # buff/taunt duration; unused by instant effects
-chain_count : int       # ChainHeal only - extra lowest-HP allies healed
+chain_count : int       # ChainHeal/ChainAttack - extra targets hit/healed
+ignore_armor : bool     # Attack/DotAttack/ChainAttack - bypasses armor entirely
+tick_damage : int       # DotAttack only - damage-over-time per tick
+tick_count : int        # DotAttack only - number of DoT ticks
+tick_interval : float   # DotAttack only - seconds between ticks
 icon : Texture2D
 ```
 
@@ -512,6 +519,8 @@ armor : int
 attack_speed : float
 abilities : Array[AbilityData]
 sprite : Texture2D
+is_melee : bool               # charges into melee range vs. holds and fires a projectile
+projectile_color : Color      # tint for ranged attacks; unused if is_melee
 ```
 
 ---
@@ -529,6 +538,8 @@ class_type : String ("Tank" | "Healer" | "Mage" | "Ranger" | "Rogue")
 priority : int
 sprite : Texture2D
 gold_value : int           # gold earned if 100% of effective max HP is dealt to this hero
+is_melee : bool             # charges into melee range vs. holds formation and fires a projectile
+projectile_color : Color    # tint for ranged attacks/heals; unused if is_melee
 ```
 
 ---
@@ -588,21 +599,41 @@ of an auto-generated basic attack. When multiple abilities are off
 cooldown at once, one is chosen **at random** among the ready ones - no
 priority order, no role logic.
 
+**Opening actions:** the instant a room fight begins, every living
+combatant gets one immediate chance to fire a ready support ability
+(Buff/Taunt/Heal/ChainHeal) before the normal random-tick loop takes
+over - this is the "party stops in formation and applies buffs, then
+the fight begins" beat, rather than leaving a Tank's Taunt or a
+Healer's Heal to a random dice roll sometime mid-fight.
+
+**Melee vs. ranged:** every hero/monster is flagged `is_melee`. The
+instant a fight begins, melee combatants (Tank, Rogue, and all current
+monsters) visually charge partway toward the opposing line; ranged
+combatants (Healer, Mage, Ranger) hold their formation position and
+fire a small tinted `CombatProjectile` at their target instead of
+lunging. Both are purely cosmetic - `CombatManager`'s targeting/damage
+never reads position, and survivors are smoothly tweened back into
+formation once the room is resolved.
+
 **Aggro:** monsters target using a per-monster threat table (whoever has
-dealt that monster the most cumulative damage). **Taunt is a hard
-override** on top of that - while active, every monster's targeting is
-forced onto the taunting hero(es), completely ignoring threat, for the
-ability's duration.
+dealt that monster the most cumulative damage, including DoT ticks and
+chain-attack splash). **Taunt is a hard override** on top of that -
+while active, every monster's targeting is forced onto the taunting
+hero(es), completely ignoring threat, for the ability's duration.
 
 **Formation:** party members are positioned by `class_type` rather than
 spawn order - Tank at the front, Ranger/Mage in the middle, Healer at
-the back, Rogue past the monster line entirely. This is currently
-positional only, layered on top of the aggro system above.
+the back, Rogue past the monster line entirely.
 
-**Visual feedback:** attacks lunge the attacker toward their target and
-back; overlapping combatants gently push apart (`SeparationArea`); a
-taunting entity turns blood red for the taunt's duration; a healed
-entity flashes green for 0.5s.
+**Visual feedback:** heroes/monsters render as small filled circles
+(`CircleVisual`); melee attacks lunge the attacker toward their target
+and back, ranged attacks/heals fire a projectile instead; overlapping
+combatants gently push apart (`SeparationArea`); a taunting entity
+turns blood red for the taunt's duration; a healed entity flashes green
+for 0.5s. Heroes spawn at the entrance one at a time with a small
+random stagger rather than all at once, and room-to-room movement (plus
+the melee charge-in) eases in/out rather than moving at constant linear
+speed.
 
 The player's decisions happen between battles through:
 
@@ -613,17 +644,28 @@ The player's decisions happen between battles through:
 
 The focus is strategy rather than micro-management.
 
-> **Implemented kits:** Tank (`Shield Wall` self-buff armor, `Taunt`
-> hard-override aggro) and Healer (`Heal` lowest-HP ally, `Chain Heal`
-> splashing to 2 additional allies at reduced effectiveness). Mage,
-> Ranger, and Rogue currently have no special abilities and only use
-> their basic attack - their class-specific kits (fireball/chain
-> lightning/ice spike, arrow types, poison/backstab) are the next step.
+> **Implemented kits (all five classes):**
+> * **Tank** — `Shield Wall` (self-buff armor), `Taunt` (hard-override aggro)
+> * **Healer** — `Heal` (lowest-HP ally), `Chain Heal` (splashes to 2 more allies at reduced effectiveness)
+> * **Mage** — `Fireball` (big single hit), `Chain Lightning` (primary + 2 additional random enemies), `Ice Spike` (another single-target bolt)
+> * **Ranger** — `Poison Arrow` (initial hit + DoT, ignores armor), `Explosive Arrow` (big armor-ignoring hit)
+> * **Rogue** — `Poison Strike` (initial hit + DoT, ignores armor), `Backstab` (big armor-ignoring hit)
 >
-> **Known simplification:** hero-side Attack-type targeting (both the
-> basic attack and any future Attack-type hero ability) is a random
-> living monster - there's no hero-side targeting AI yet (e.g. a Rogue
-> preferring an untaunted target for a backstab-style bonus).
+> **Known simplification:** hero-side Attack-type targeting (basic
+> attacks and any Attack/DotAttack/ChainAttack hero ability) is a
+> random living monster - there's no hero-side targeting AI yet (e.g. a
+> Rogue preferring an untaunted target for a bonus, or Chain Lightning
+> preferring clustered targets over random ones).
+>
+> **Known simplification:** DoT ticks and Chain Attack's extra hits
+> don't get their own log line per tick/target beyond the opening hit -
+> kept quiet deliberately so a multi-tick poison doesn't spam the event
+> log.
+>
+> **Known simplification:** projectiles are cosmetic-after-the-fact -
+> damage applies instantly and the projectile is spawned as a visual
+> flourish, not a delay before the hit registers (same simplification
+> the melee lunge already made).
 
 ---
 
@@ -640,11 +682,17 @@ What's actually playable today, via `scenes/test/TestHarness.tscn`:
 * ✅ Utility rooms (`RoomData.room_type == "Utility"`): one-time party heal on entry, plus stacking gold/trap-damage multipliers for the rest of the wave
 * ✅ Party moves at a reduced speed approaching any room with a monster or trap (`Dungeon.room_danger_speed_multiplier`), giving projectile traps more exposure time to land hits
 * ✅ Multi-hero parties (Tank/Healer/Ranger/Mage, plus a random 4th class) move and fight together as a real group via `Dungeon.send_wave()` + `CombatManager.begin_group_combat()` — not solo runs anymore
+* ✅ Heroes spawn at the entrance one at a time with a small random stagger, rather than all appearing at once
 * ✅ Class-based formation (Tank front, Ranger/Mage mid, Healer back, Rogue flanking past the monster line)
 * ✅ Monsters spawn visibly in their room up front (not lazily on arrival) and stay put until fought or the wave ends
-* ✅ Aggro via a per-monster threat table (highest cumulative damage dealt); Tank `Taunt` is a hard override that forces monster targeting onto the taunting hero for its duration, and is correctly cleared the instant its owner dies rather than only on timeout
-* ✅ Ability/cooldown system (`AbilityData`): every combatant has an implicit basic attack (now genuinely paced by `attack_speed`) plus authored special abilities, chosen randomly among whichever are off cooldown. Tank kit (Shield Wall self-buff, Taunt) and Healer kit (Heal, Chain Heal) are implemented; Mage/Ranger/Rogue have no special abilities yet
-* ✅ Visual combat feedback: attack lunge toward target and back, overlap-based separation push between combatants, taunting entities turn red, healed entities flash green
+* ✅ Melee vs. ranged distinction: melee combatants (Tank, Rogue, all current monsters) visually charge partway toward the opposing line when a fight begins; ranged combatants (Healer, Mage, Ranger) hold formation and fire a projectile instead — purely cosmetic, doesn't affect targeting/damage
+* ✅ Opening-actions beat: every combatant gets one immediate chance to fire a ready support ability (Buff/Taunt/Heal/ChainHeal) the instant a fight starts, instead of waiting on a random tick roll
+* ✅ Aggro via a per-monster threat table (highest cumulative damage dealt, including DoT ticks and chain-attack splash); Tank `Taunt` is a hard override that forces monster targeting onto the taunting hero for its duration, and is correctly cleared the instant its owner dies rather than only on timeout
+* ✅ Ability/cooldown system (`AbilityData`) with all five class kits implemented — Tank (Shield Wall, Taunt), Healer (Heal, Chain Heal), Mage (Fireball, Chain Lightning, Ice Spike), Ranger (Poison Arrow, Explosive Arrow), Rogue (Poison Strike, Backstab) — each combatant picks randomly among whichever abilities are off cooldown
+* ✅ Two additional ability types beyond plain Attack: `DotAttack` (initial hit + ticking damage, e.g. poison) and `ChainAttack` (primary target + N additional random enemies at reduced damage, e.g. Chain Lightning)
+* ✅ Heroes/monsters render as small filled circles (`CircleVisual`, 20% smaller than the original placeholder squares) instead of squares
+* ✅ Visual combat feedback: melee attack lunge toward target and back, ranged attacks/heals fire a tinted `CombatProjectile`, overlap-based separation push between combatants, taunting entities turn red, healed entities flash green
+* ✅ Room-to-room movement and the melee charge-in both ease in/out (`TRANS_SINE`/`EASE_IN_OUT`) rather than moving at constant linear speed
 * ✅ Ability usage narrates itself into the event log (`CombatManager.ability_used`) — every attack, heal, buff, and taunt (plus taunt expiry) is a readable log line, which is also how a mismatched `.tres` enum value was caught and fixed during testing
 * ✅ Wave difficulty is outcome-driven, not a manual counter: `WaveManager`'s tier only advances on a full party wipe; escaping heroes send the same-strength party again. The stat multiplier scales **linearly** per tier (1.0x, 1.1x, 1.2x, ...) and applies to a spawned hero's health/damage/armor/attack-speed *and* gold value together, so the gold-per-damage rate stays constant as waves get tougher. Monsters and traps are not scaled by tier
 * ✅ Gold economy, wave counter, and a scrolling event log
@@ -658,9 +706,9 @@ What's actually playable today, via `scenes/test/TestHarness.tscn`:
 Notably **not yet wired up**, despite the underlying scripts existing:
 
 * ⬜ No reward-phase content yet — `_on_reward_phase_started` immediately loops back to building since there's no card draft system
-* ⬜ Mage, Ranger, and Rogue have no special abilities yet (fireball/chain lightning/ice spike, arrow types, poison/backstab) — they currently only use their basic attack
 * ⬜ `BossData` has no room encounter, phase, or summon logic
 * ⬜ `RoomData.room_type`, `HeroData.class_type`, and `CardData.rarity` are still independent `@export_enum` strings, not yet centralized on `GameEnums` like `AbilityData`/`TrapData` were
+* ⬜ No hero-side targeting AI — heroes (and their abilities) still pick a random living enemy rather than anything priority-based
 
 > **Architecture note:** the original plan called this a "Dungeon Grid,"
 > but what's implemented is a **linear ordered path** (`DungeonManager`
@@ -696,7 +744,7 @@ Players should constantly think:
 6. ✅ Room Upgrades
 7. ✅ Wave System *(outcome-driven tier: only advances on a full wipe; linear stat + gold scaling per tier — see Wave Progression)*
 8. ⬜ Card Drafting
-9. 🟡 Hero Parties *(parties move and fight together with class formation, aggro/taunt, and Tank/Healer kits; Mage/Ranger/Rogue still only basic-attack — see Milestone 4)*
+9. 🟡 Hero Parties *(parties move and fight together with class formation, aggro/taunt, melee-vs-ranged, and all five class kits implemented; still no hero-side targeting AI — see Milestone 4)*
 10. ⬜ Boss Room
 11. ⬜ Biomes
 12. ⬜ Meta Progression
@@ -735,7 +783,7 @@ Create a complete playable dungeon loop.
 
 ---
 
-## 🔴 MILESTONE 2 — Dungeon Progression (IN PROGRESS)
+## ✅ MILESTONE 2 — Dungeon Progression (COMPLETE)
 
 ### Goal
 
@@ -745,16 +793,16 @@ Expand the player's choices.
 
 * ✅ Multiple room types *(Trap rooms — both INSTANT and PROJECTILE/DoT variants — and Utility rooms are all implemented; see `TrapData`/`spike_corridor.tres`/`poison_arrow_corridor.tres` and `sanctuary_room.tres`)*
 * ✅ Room upgrades *(multi-tier chains work end-to-end — validated with a 3-tier Skeleton Den; `RoomUpgradeZone` now matches the exact upgrade resource rather than by room name, fixing a bug that would've misfired once a room had 2+ upgrade tiers)*
-* ⬜ Economy balancing *(deliberately deferred until all classes behave like a real party — Tank/Healer now have real kits, but Mage/Ranger/Rogue are still basic-attack only, so tuning gold/cost numbers now would just need redoing once they're finished)*
+* 🟡 Economy balancing *(the original blocker is gone — all five classes now have real kits — but the actual gold/cost number-tuning pass itself hasn't happened yet; carrying forward rather than blocking the milestone on it)*
 * ✅ Dungeon expansion (insert/remove rooms mid-run)
 * ✅ Multiple waves *(outcome-driven tier progression with linear stat/gold scaling — see Wave Progression; no per-wave CONTENT variation yet, e.g. new room/monster pools unlocking at higher tiers)*
 
 ### Success Criteria
 
-* ⬜ Every wave offers meaningful spending decisions
-* ⬜ Different room combinations become viable
+* 🟡 Every wave offers meaningful spending decisions
+* 🟡 Different room combinations become viable
 
-*(Both success criteria are still honestly unmet, though less starkly than before — there are now two trap behaviors, a utility room, and a 3-tier upgrade chain, but that's still a handful of room types, not the deep build variety the vision calls for. Economy balancing is also explicitly on hold. That's Milestone 3 (cards) and more room content territory.)*
+*(Called complete per project decision — there's now genuine room/trap/utility variety, full class kits with distinct melee/ranged behavior, and outcome-driven difficulty scaling, which together clear the original bar for this milestone. Both success criteria are marked 🟡 rather than ✅ in the spirit of staying honest: there are a handful of room types, not yet the deep build variety the vision calls for, and the economy still hasn't had a real tuning pass. That deeper variety is explicitly Milestone 3 (cards) and further room content territory.)*
 
 ---
 
@@ -787,9 +835,9 @@ Increase tactical depth.
 
 ### Tasks
 
-* 🟡 Multiple hero classes *(`class_type` now drives formation position; Tank and Healer have real kits, Mage/Ranger/Rogue don't yet)*
+* ✅ Multiple hero classes *(`class_type` drives formation position AND melee/ranged behavior; all five classes have real kits)*
 * 🟡 Party AI *(aggro/threat table + Tank taunt hard-override implemented in `CombatManager`; no hero-side targeting AI yet - heroes still pick a random enemy)*
-* 🟡 Hero abilities *(`AbilityData` + cooldown system implemented; Tank: Shield Wall + Taunt, Healer: Heal + Chain Heal; Mage/Ranger/Rogue kits not started)*
+* ✅ Hero abilities *(`AbilityData` + cooldown system implemented for all five classes - Tank: Shield Wall + Taunt, Healer: Heal + Chain Heal, Mage: Fireball + Chain Lightning + Ice Spike, Ranger: Poison Arrow + Explosive Arrow, Rogue: Poison Strike + Backstab)*
 * ⬜ Elite heroes
 * ⬜ Party compositions
 

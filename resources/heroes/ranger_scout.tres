@@ -2,6 +2,8 @@
 
 [ext_resource type="Script" uid="uid://cjwm4rv0y2emj" path="res://scripts/heroes/HeroData.gd" id="1_faeej"]
 [ext_resource type="Script" uid="uid://gwfofjo7s5bk" path="res://scripts/abilities/AbilityData.gd" id="1_pivnv"]
+[ext_resource type="Resource" uid="uid://b4edhaxlc31pu" path="res://resources/ablilities/ranger_poison_arrow.tres" id="2_xsvm3"]
+[ext_resource type="Resource" uid="uid://cxupk3w4rcdi6" path="res://resources/ablilities/ranger_explosive_arrow.tres" id="3_g3t5o"]
 
 [resource]
 script = ExtResource("1_faeej")
@@ -9,8 +11,10 @@ hero_name = "Scout"
 max_health = 16
 damage = 6
 attack_speed = 1.3
+abilities = Array[ExtResource("1_pivnv")]([ExtResource("2_xsvm3"), ExtResource("3_g3t5o")])
 class_type = "Ranger"
 priority = 2
 gold_value = 25
 is_melee = false
+projectile_color = Color(0.76862043, 0.6651851, 0.42358288, 1)
 metadata/_custom_type_script = "uid://cjwm4rv0y2emj"

@@ -1,0 +1,10 @@
+[gd_resource type="Resource" script_class="AbilityData" format=3 uid="uid://bar6qvehj54gl"]
+
+[ext_resource type="Script" uid="uid://gwfofjo7s5bk" path="res://scripts/abilities/AbilityData.gd" id="1_mi2ay"]
+
+[resource]
+script = ExtResource("1_mi2ay")
+ability_name = "Fireball"
+cooldown = 6.0
+magnitude = 12
+metadata/_custom_type_script = "uid://gwfofjo7s5bk"

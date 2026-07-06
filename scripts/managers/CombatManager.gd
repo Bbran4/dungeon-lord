@@ -2,45 +2,41 @@ extends Node
 
 ## Tick-based group combat with an ability/cooldown system.
 ##
+## ABILITY TYPES: ATTACK (single-target instant hit), DOT_ATTACK (single
+## initial hit + a fire-and-forget ticking DoT afterward, e.g. poison),
+## CHAIN_ATTACK (a primary target plus chain_count additional random
+## living enemies at reduced damage, e.g. Chain Lightning), HEAL,
+## CHAIN_HEAL, BUFF, and TAUNT (all ally/self-targeted "support" types,
+## handled by _execute_support_ability).
+##
 ## OPENING ACTIONS: the instant combat begins (elapsed_time = 0), every
-## living actor gets ONE chance to fire a ready non-Attack ability
-## (Buff/Taunt/Heal/ChainHeal) via _perform_opening_actions - this is
-## the "party stops in formation and applies buffs, then the fight
-## begins" beat, rather than leaving Shield Wall/Taunt/Heal to a random
-## tick roll sometime mid-fight. After that one-time pass, the normal
-## per-tick loop below takes over, where each living combatant acts
-## independently once its own ability cooldowns allow it - RANDOMLY
-## among whichever abilities (including the opening ones, once their
-## cooldown comes back around) are ready, not priority order or role
-## logic.
+## living actor gets ONE chance to fire a ready SUPPORT ability (Heal/
+## ChainHeal/Buff/Taunt) via _perform_opening_actions - the "party stops
+## in formation and applies buffs, then the fight begins" beat. Attack-
+## type abilities (Attack/DotAttack/ChainAttack) never fire here; only
+## the normal per-tick loop uses those.
 ##
 ## AGGRO: monsters target using a per-monster threat table (whoever has
-## dealt that monster the most cumulative damage). TAUNT is a HARD
-## OVERRIDE on top of that - while a hero's taunt is active, every
-## monster's target selection is forced onto the currently-taunting
-## hero(s), completely ignoring the threat table, for the ability's
-## duration. Heroes still pick a random living monster target for their
-## own Attack-type abilities (no hero-side targeting AI yet).
+## dealt that monster the most cumulative damage, including DoT ticks
+## and chain-attack splash). TAUNT is a HARD OVERRIDE on top of that -
+## while a hero's taunt is active, every monster's target selection is
+## forced onto the currently-taunting hero(s), completely ignoring the
+## threat table, for the ability's duration.
 ##
 ## BUFFS (armor bonuses) are applied immediately and tracked for the
 ## rest of the encounter; anything still active when the encounter ends
 ## is force-reverted so nothing leaks into the next room.
 ##
-## TAUNTS are tracked the same way, with one extra wrinkle: a taunt must
-## be cleared the instant its owner dies, not just when its duration
-## expires - otherwise a monster can be left hard-locked onto a dead
-## hero. _expire_taunts checks liveness every tick for exactly this
-## reason. Dictionary.keys() returns an untyped Array, so iterating it
-## with a strictly-typed `for hero: CombatEntity in ...` performs a
-## checked cast per element that CRASHES if that element is a genuinely
-## freed object - so both taunt-cleanup functions iterate untyped and
-## check is_instance_valid() before treating anything as a CombatEntity.
+## TAUNTS are cleared the instant their owner dies, not just when their
+## duration expires. Dictionary.keys() returns an untyped Array, so
+## iterating it with a strictly-typed `for hero: CombatEntity in ...`
+## crashes if an element is a genuinely freed object - both taunt
+## functions iterate untyped and check is_instance_valid() first.
 ##
 ## ability_used emits a plain human-readable String (not CombatEntity
 ## references) every time any actor executes any ability, plus when a
-## taunt expires - this is what lets TestHarness (or anything else)
-## narrate combat into a log without ever touching a possibly-freed
-## entity itself.
+## taunt expires - lets TestHarness narrate combat into a log without
+## ever touching a possibly-freed entity itself.
 
 signal group_combat_started(heroes: Array[CombatEntity], monsters: Array[CombatEntity])
 signal group_combat_finished(heroes_won: bool)
@@ -50,30 +46,20 @@ signal ability_used(message: String)
 ## ability cooldowns still determine how often THEY personally act.
 const TICK_INTERVAL: float = 0.1
 
-## Chain Heal's secondary targets heal for this fraction of magnitude.
+## Chain Heal's / Chain Attack's secondary targets are affected at this
+## fraction of magnitude.
 const CHAIN_HEAL_FALLOFF: float = 0.6
+const CHAIN_ATTACK_FALLOFF: float = 0.6
 
 
 func begin_group_combat(heroes: Array[CombatEntity], monsters: Array[CombatEntity]) -> void:
 
 	group_combat_started.emit(heroes, monsters)
 
-	# cooldowns[actor][ability] = remaining seconds. Ability objects are
-	# used as dictionary keys directly (by identity), which works fine
-	# since each entity's abilities - including its own implicit basic
-	# attack instance - are stable resource references for its lifetime.
 	var cooldowns: Dictionary = {}
-
-	# threat_table[monster][hero] = cumulative damage dealt. Only
-	# monsters get entries - heroes are never aggro targets.
 	var threat_table: Dictionary = {}
-
-	# active_taunts[hero] = elapsed_time at which the taunt expires.
 	var active_taunts: Dictionary = {}
-
-	# Array of {"entity": CombatEntity, "amount": int, "expires_at": float}
 	var active_buffs: Array = []
-
 	var elapsed_time: float = 0.0
 
 	for hero: CombatEntity in heroes:
@@ -84,7 +70,7 @@ func begin_group_combat(heroes: Array[CombatEntity], monsters: Array[CombatEntit
 		threat_table[monster] = {}
 
 	# Opening beat: "stop in formation and apply buffs" before the fight
-	# begins. Only ever touches non-Attack abilities.
+	# begins. Only ever touches support (non-attack) abilities.
 	_perform_opening_actions(heroes, cooldowns, active_taunts, active_buffs, elapsed_time)
 	_perform_opening_actions(monsters, cooldowns, active_taunts, active_buffs, elapsed_time)
 
@@ -138,11 +124,17 @@ func _describe(entity: Variant) -> String:
 	return "???"
 
 
+func _is_support_type(ability_type: GameEnums.AbilityType) -> bool:
+	return ability_type != GameEnums.AbilityType.ATTACK \
+		and ability_type != GameEnums.AbilityType.DOT_ATTACK \
+		and ability_type != GameEnums.AbilityType.CHAIN_ATTACK
+
+
 ## Runs once, immediately, right when combat begins (elapsed_time = 0)
 ## - before the main random-tick loop. Each living actor in `group` gets
-## ONE chance to fire a ready non-Attack ability (Buff/Taunt/Heal/
-## ChainHeal) as an opening beat. Never touches Attack-type abilities -
-## those only ever fire from the normal tick loop.
+## ONE chance to fire a ready SUPPORT ability (Heal/ChainHeal/Buff/
+## Taunt) as an opening beat. Never touches Attack/DotAttack/
+## ChainAttack - those only ever fire from the normal tick loop.
 func _perform_opening_actions(group: Array[CombatEntity], cooldowns: Dictionary, active_taunts: Dictionary, active_buffs: Array, elapsed_time: float) -> void:
 
 	for actor: CombatEntity in group:
@@ -154,7 +146,7 @@ func _perform_opening_actions(group: Array[CombatEntity], cooldowns: Dictionary,
 
 		for ability: AbilityData in actor.get_combat_abilities():
 
-			if ability.ability_type == GameEnums.AbilityType.ATTACK:
+			if not _is_support_type(ability.ability_type):
 				continue
 
 			var remaining: float = actor_cooldowns.get(ability, 0.0)
@@ -219,34 +211,148 @@ func _execute_ability(
 	is_monster_side: bool
 ) -> void:
 
-	if ability.ability_type == GameEnums.AbilityType.ATTACK:
+	match ability.ability_type:
 
-		var actor_name: String = _describe(actor)
-		var target: CombatEntity = _pick_enemy_target(actor, enemies, threat_table, active_taunts, elapsed_time, is_monster_side)
+		GameEnums.AbilityType.ATTACK:
+			_execute_attack(actor, ability, enemies, threat_table, active_taunts, elapsed_time, is_monster_side)
 
-		if target == null:
-			return
+		GameEnums.AbilityType.DOT_ATTACK:
+			_execute_dot_attack(actor, ability, enemies, threat_table, active_taunts, elapsed_time, is_monster_side)
 
-		var target_name: String = _describe(target)
-		var dealt: int = actor.attack_with_amount(target, ability.magnitude)
+		GameEnums.AbilityType.CHAIN_ATTACK:
+			_execute_chain_attack(actor, ability, enemies, threat_table, active_taunts, elapsed_time, is_monster_side)
 
-		if is_instance_valid(target) and threat_table.has(target):
-			var monster_threat: Dictionary = threat_table[target]
-			monster_threat[actor] = monster_threat.get(actor, 0.0) + float(dealt)
-			threat_table[target] = monster_threat
+		_:
+			_execute_support_ability(actor, ability, allies, active_taunts, active_buffs, elapsed_time)
 
-		var via: String = " (%s)" % ability.ability_name if ability.ability_name != "Attack" else ""
-		ability_used.emit("%s attacks %s%s for %d" % [actor_name, target_name, via, dealt])
+
+func _execute_attack(
+	actor: CombatEntity,
+	ability: AbilityData,
+	enemies: Array[CombatEntity],
+	threat_table: Dictionary,
+	active_taunts: Dictionary,
+	elapsed_time: float,
+	is_monster_side: bool
+) -> void:
+
+	var target: CombatEntity = _pick_enemy_target(actor, enemies, threat_table, active_taunts, elapsed_time, is_monster_side)
+
+	if target == null:
 		return
 
-	_execute_support_ability(actor, ability, allies, active_taunts, active_buffs, elapsed_time)
+	var actor_name: String = _describe(actor)
+	var target_name: String = _describe(target)
+	var dealt: int = actor.attack_with_amount(target, ability.magnitude, ability.ignore_armor)
+
+	_add_threat(threat_table, target, actor, dealt)
+
+	var via: String = " (%s)" % ability.ability_name if ability.ability_name != "Attack" else ""
+	ability_used.emit("%s attacks %s%s for %d" % [actor_name, target_name, via, dealt])
+
+
+## Initial hit, then kicks off a fire-and-forget DoT tick loop
+## (_apply_ability_dot) that keeps running even after this encounter
+## ends - matching how PoisonArrowTrapController's DoT already behaves,
+## since poison lingers regardless of what room the party is in next.
+func _execute_dot_attack(
+	actor: CombatEntity,
+	ability: AbilityData,
+	enemies: Array[CombatEntity],
+	threat_table: Dictionary,
+	active_taunts: Dictionary,
+	elapsed_time: float,
+	is_monster_side: bool
+) -> void:
+
+	var target: CombatEntity = _pick_enemy_target(actor, enemies, threat_table, active_taunts, elapsed_time, is_monster_side)
+
+	if target == null:
+		return
+
+	var actor_name: String = _describe(actor)
+	var target_name: String = _describe(target)
+	var dealt: int = actor.attack_with_amount(target, ability.magnitude, ability.ignore_armor)
+
+	_add_threat(threat_table, target, actor, dealt)
+
+	ability_used.emit("%s hits %s with %s for %d (poisoned)" % [actor_name, target_name, ability.ability_name, dealt])
+
+	_apply_ability_dot(actor, target, ability, threat_table)
+
+
+## Fire-and-forget - called without `await` from _execute_dot_attack,
+## same pattern PoisonArrowTrapController already uses for its own DoT.
+func _apply_ability_dot(actor: CombatEntity, target: CombatEntity, ability: AbilityData, threat_table: Dictionary) -> void:
+
+	for i: int in ability.tick_count:
+
+		await get_tree().create_timer(ability.tick_interval).timeout
+
+		if not is_instance_valid(target) or target.is_queued_for_deletion() or target.current_health <= 0:
+			return
+
+		var tick_dealt: int = target.take_damage(ability.tick_damage, ability.ignore_armor)
+
+		if is_instance_valid(actor):
+			_add_threat(threat_table, target, actor, tick_dealt)
+
+
+## Primary target plus chain_count additional random LIVING enemies
+## (distinct from the primary), each at CHAIN_ATTACK_FALLOFF damage.
+func _execute_chain_attack(
+	actor: CombatEntity,
+	ability: AbilityData,
+	enemies: Array[CombatEntity],
+	threat_table: Dictionary,
+	active_taunts: Dictionary,
+	elapsed_time: float,
+	is_monster_side: bool
+) -> void:
+
+	var primary: CombatEntity = _pick_enemy_target(actor, enemies, threat_table, active_taunts, elapsed_time, is_monster_side)
+
+	if primary == null:
+		return
+
+	var chain_pool: Array[CombatEntity] = _living_only(enemies)
+	chain_pool.erase(primary)
+	chain_pool.shuffle()
+
+	var extra_count: int = mini(ability.chain_count, chain_pool.size())
+
+	var targets: Array[CombatEntity] = [primary]
+	for i: int in extra_count:
+		targets.append(chain_pool[i])
+
+	var actor_name: String = _describe(actor)
+	var hit_names: Array[String] = []
+
+	for i: int in targets.size():
+
+		var target: CombatEntity = targets[i]
+		var amount: int = ability.magnitude if i == 0 else int(round(ability.magnitude * CHAIN_ATTACK_FALLOFF))
+		var dealt: int = actor.attack_with_amount(target, amount, ability.ignore_armor)
+
+		_add_threat(threat_table, target, actor, dealt)
+		hit_names.append(_describe(target))
+
+	ability_used.emit("%s casts %s hitting %s" % [actor_name, ability.ability_name, ", ".join(hit_names)])
+
+
+func _add_threat(threat_table: Dictionary, target: CombatEntity, actor: CombatEntity, amount: int) -> void:
+
+	if is_instance_valid(target) and threat_table.has(target):
+		var monster_threat: Dictionary = threat_table[target]
+		monster_threat[actor] = monster_threat.get(actor, 0.0) + float(amount)
+		threat_table[target] = monster_threat
 
 
 ## Handles Heal/ChainHeal/Buff/Taunt - the "support" ability types that
 ## only ever target within `allies`, never an enemy. Shared between the
-## main per-tick execution above and the opening-actions pass
-## (_perform_opening_actions), so a Tank's Taunt or a Healer's Heal can
-## fire the instant combat starts, not just from a later random roll.
+## main per-tick execution and the opening-actions pass, so a Tank's
+## Taunt or a Healer's Heal can fire the instant combat starts, not
+## just from a later random roll.
 func _execute_support_ability(
 	actor: CombatEntity,
 	ability: AbilityData,
@@ -267,6 +373,7 @@ func _execute_support_ability(
 			if target != null and is_instance_valid(target):
 				var target_name: String = _describe(target)
 				target.heal(ability.magnitude)
+				actor.fire_projectile_to(target)
 				ability_used.emit("%s casts %s on %s for %d" % [actor_name, ability.ability_name, target_name, ability.magnitude])
 
 		GameEnums.AbilityType.CHAIN_HEAL:
@@ -280,12 +387,14 @@ func _execute_support_ability(
 
 			var primary_name: String = _describe(living[0])
 			living[0].heal(ability.magnitude)
+			actor.fire_projectile_to(living[0])
 
 			var extra: int = mini(ability.chain_count, living.size() - 1)
 			var extra_names: Array[String] = []
 
 			for i: int in range(1, extra + 1):
 				living[i].heal(int(round(ability.magnitude * CHAIN_HEAL_FALLOFF)))
+				actor.fire_projectile_to(living[i])
 				extra_names.append(_describe(living[i]))
 
 			var summary: String = primary_name

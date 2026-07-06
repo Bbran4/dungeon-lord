@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="AbilityData" format=3 uid="uid://b4edhaxlc31pu"]
+
+[ext_resource type="Script" uid="uid://gwfofjo7s5bk" path="res://scripts/abilities/AbilityData.gd" id="1_y1co0"]
+
+[resource]
+script = ExtResource("1_y1co0")
+ability_name = "Poison Arrow"
+ability_type = 5
+cooldown = 5.0
+magnitude = 3
+ignore_armor = true
+tick_damage = 2
+tick_count = 4
+metadata/_custom_type_script = "uid://gwfofjo7s5bk"

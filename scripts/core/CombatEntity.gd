@@ -9,16 +9,23 @@ signal died(entity: CombatEntity)
 @export var armor: int = 0
 @export var attack_speed: float = 1.0
 
-## Whether this entity charges into melee range when a room fight
-## begins (see Dungeon._charge_melee_into_combat) or holds its
-## formation position as a ranged combatant. Set by Dungeon at spawn
-## time from HeroData.is_melee / MonsterData.is_melee.
+## Whether this entity charges into melee range and lunges when
+## attacking (true), or holds position and fires a CombatProjectile
+## visual instead (false). Set by Dungeon at spawn time from
+## HeroData.is_melee / MonsterData.is_melee.
 @export var is_melee: bool = true
+
+## Tint used for this entity's CombatProjectile visuals (ranged attacks
+## and, for Healers, heal casts). Set by Dungeon at spawn time from
+## HeroData.projectile_color / MonsterData.projectile_color.
+@export var projectile_color: Color = Color.WHITE
 
 ## Special abilities beyond the implicit basic attack (see
 ## get_combat_abilities). Authored on HeroData/MonsterData and passed
 ## in via configure().
 @export var abilities: Array[AbilityData] = []
+
+const PROJECTILE_SCENE: PackedScene = preload("res://scenes/effects/CombatProjectile.tscn")
 
 var current_health: int = 0
 
@@ -33,14 +40,14 @@ var damage_taken: int = 0
 var healing_received: int = 0
 
 ## Visual-only "step toward target and back" distance/duration for the
-## attack lunge. Purely cosmetic - never affects global_position, which
-## stays the entity's real position for movement/formation/collision.
+## MELEE attack lunge. Purely cosmetic - never affects global_position,
+## which stays the entity's real position for movement/formation/
+## collision.
 const ATTACK_LUNGE_DISTANCE: float = 24.0
 const ATTACK_LUNGE_DURATION: float = 0.25
 
 ## How close (in px, center-to-center) two combatants are allowed to get
 ## before separation starts pushing them apart, and how strongly.
-## Scaled down alongside the 20% smaller circle visuals.
 const SEPARATION_RADIUS: float = 14.4
 const SEPARATION_STRENGTH: float = 250.0
 
@@ -51,12 +58,11 @@ const HEAL_FLASH_COLOR: Color = Color(0.2, 1.0, 0.3, 1.0)
 const HEAL_FLASH_DURATION: float = 0.5
 
 ## "Body" (optional) wraps the visual so the attack lunge can animate it
-## without touching global_position, which stays the entity's real
-## position. "SeparationArea" (optional) is an Area2D used to detect
-## overlapping combatants for the separation push. Both are looked up
-## defensively - a bare CombatEntity.new() with no child scene (e.g.
-## TestHarness's sandbox fight) simply won't lunge or separate, and
-## combat still works fine without them.
+## without touching global_position. "SeparationArea" (optional) is an
+## Area2D used to detect overlapping combatants for the separation
+## push. Both are looked up defensively - a bare CombatEntity.new()
+## with no child scene (e.g. TestHarness's sandbox fight) simply won't
+## lunge or separate, and combat still works fine without them.
 @onready var _body: Node2D = get_node_or_null("Body") as Node2D
 @onready var _separation_area: Area2D = get_node_or_null("SeparationArea") as Area2D
 @onready var _visual: CircleVisual = get_node_or_null("Body/Visual") as CircleVisual
@@ -117,16 +123,20 @@ func attack(target: CombatEntity) -> int:
 
 
 ## Returns the mitigated damage actually dealt (0 if target is null).
-## Used by both the basic attack and any Attack-type special ability
-## (a future Ranger arrow, etc.), so lunge + damage + threat-tracking
-## behave identically regardless of which ability triggered them.
-func attack_with_amount(target: CombatEntity, amount: int) -> int:
+## Melee entities lunge toward the target; ranged entities (is_melee =
+## false) fire a CombatProjectile visual instead. Either way the damage
+## itself is applied instantly - the visual is a cosmetic flourish, not
+## a delay before the hit registers.
+func attack_with_amount(target: CombatEntity, amount: int, ignore_armor: bool = false) -> int:
 	if target == null:
 		return 0
 
-	_play_attack_lunge(target.global_position)
+	if is_melee:
+		_play_attack_lunge(target.global_position)
+	else:
+		fire_projectile_to(target)
 
-	return target.take_damage(amount)
+	return target.take_damage(amount, ignore_armor)
 
 
 ## Returns the mitigated damage actually applied.
@@ -166,6 +176,27 @@ func effective_max_health() -> int:
 	return max_health + healing_received
 
 
+## Spawns a CombatProjectile traveling from this entity to `target`,
+## tinted with this entity's projectile_color. No-op if target is
+## invalid or this entity has no parent yet. Used for ranged basic
+## attacks/abilities (via attack_with_amount) AND for Heal/Chain Heal
+## casts (called directly by CombatManager), since healing is always
+## visually a "beam to the target" regardless of is_melee.
+func fire_projectile_to(target: CombatEntity) -> void:
+
+	if target == null or not is_instance_valid(target):
+		return
+
+	var parent: Node = get_parent()
+
+	if parent == null:
+		return
+
+	var projectile: CombatProjectile = PROJECTILE_SCENE.instantiate() as CombatProjectile
+	parent.add_child(projectile)
+	projectile.launch(global_position, target.global_position, projectile_color)
+
+
 ## Persistent (not a flash) color change while Taunt is active. Called
 ## by CombatManager the instant Taunt fires and again the instant it
 ## expires, so this only ever needs to reflect "on" or "off" - no
@@ -200,7 +231,8 @@ func _rebuild_basic_attack_ability() -> void:
 
 
 ## Tweens the visual Body a short distance toward the target and back.
-## No-op if this entity has no Body (e.g. a bare CombatEntity.new()).
+## MELEE ONLY - ranged entities never call this (see
+## attack_with_amount). No-op if this entity has no Body.
 func _play_attack_lunge(target_position: Vector2) -> void:
 
 	if _body == null:

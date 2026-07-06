@@ -1,6 +1,9 @@
 [gd_resource type="Resource" script_class="HeroData" format=3 uid="uid://caiy4bqh2vn3o"]
 
 [ext_resource type="Script" uid="uid://cjwm4rv0y2emj" path="res://scripts/heroes/HeroData.gd" id="1_a40cq"]
+[ext_resource type="Script" uid="uid://gwfofjo7s5bk" path="res://scripts/abilities/AbilityData.gd" id="1_uy8tr"]
+[ext_resource type="Resource" uid="uid://cy4sxba71p0e0" path="res://resources/ablilities/rogue_poison_strike.tres" id="2_7bye0"]
+[ext_resource type="Resource" uid="uid://wrn481pjixdh" path="res://resources/ablilities/rogue_backstab.tres" id="3_ubet2"]
 
 [resource]
 script = ExtResource("1_a40cq")
@@ -9,6 +12,7 @@ max_health = 15
 damage = 5
 armor = 1
 attack_speed = 1.4
+abilities = Array[ExtResource("1_uy8tr")]([ExtResource("2_7bye0"), ExtResource("3_ubet2")])
 class_type = "Rogue"
 priority = 3
 gold_value = 25

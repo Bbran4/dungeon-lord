@@ -12,17 +12,25 @@ class_name AbilityData
 
 @export var cooldown : float = 4.0
 
-## Damage/heal amount (Attack/Heal/ChainHeal), or armor bonus (Buff).
-## Unused by Taunt.
+## Damage/heal amount (Attack/DotAttack/ChainAttack/Heal/ChainHeal), or
+## armor bonus (Buff). Unused by Taunt.
 @export var magnitude : int = 0
 
 ## How long the effect lasts - armor bonus duration (Buff), or forced-
-## target window (Taunt). Unused by Heal/ChainHeal/Attack, which are
-## instant.
+## target window (Taunt). Unused by everything else.
 @export var duration : float = 0.0
 
-## ChainHeal only: how many ADDITIONAL lowest-HP allies (beyond the
-## primary target) also get healed, at reduced effectiveness.
+## Extra targets beyond the primary: additional lowest-HP allies healed
+## (ChainHeal) or additional random enemies hit (ChainAttack).
 @export var chain_count : int = 0
+
+## Attack/DotAttack/ChainAttack only - whether this ability's damage
+## bypasses armor entirely (e.g. poison, explosive, backstab).
+@export var ignore_armor : bool = false
+
+## DotAttack only - damage-over-time applied after the initial hit.
+@export var tick_damage : int = 0
+@export var tick_count : int = 0
+@export var tick_interval : float = 1.0
 
 @export var icon : Texture2D

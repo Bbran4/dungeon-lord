@@ -29,3 +29,6 @@ var class_type : String = "Tank"
 ## Dungeon._charge_melee_into_combat). Tank/Rogue = true; Healer/Mage/
 ## Ranger = false.
 @export var is_melee : bool = true
+## Tint for this hero's ranged CombatProjectile visuals (attacks and,
+## for Healers, heal casts). Unused if is_melee is true.
+@export var projectile_color : Color = Color.WHITE

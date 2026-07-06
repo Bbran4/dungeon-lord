@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="AbilityData" format=3 uid="uid://wrn481pjixdh"]
+
+[ext_resource type="Script" uid="uid://gwfofjo7s5bk" path="res://scripts/abilities/AbilityData.gd" id="1_iwl21"]
+
+[resource]
+script = ExtResource("1_iwl21")
+ability_name = "Backstab"
+cooldown = 5.0
+magnitude = 9
+ignore_armor = true
+metadata/_custom_type_script = "uid://gwfofjo7s5bk"

@@ -1,0 +1,9 @@
+[gd_resource type="Resource" script_class="AbilityData" format=3 uid="uid://bcd25d8abcafh"]
+
+[ext_resource type="Script" uid="uid://gwfofjo7s5bk" path="res://scripts/abilities/AbilityData.gd" id="1_kqurr"]
+
+[resource]
+script = ExtResource("1_kqurr")
+ability_name = "Ice Spike"
+magnitude = 6
+metadata/_custom_type_script = "uid://gwfofjo7s5bk"

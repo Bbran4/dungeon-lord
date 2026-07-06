@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="AbilityData" format=3 uid="uid://cxupk3w4rcdi6"]
+
+[ext_resource type="Script" uid="uid://gwfofjo7s5bk" path="res://scripts/abilities/AbilityData.gd" id="1_6asrw"]
+
+[resource]
+script = ExtResource("1_6asrw")
+ability_name = "Explosive Arrow"
+cooldown = 8.0
+magnitude = 10
+ignore_armor = true
+metadata/_custom_type_script = "uid://gwfofjo7s5bk"

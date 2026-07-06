@@ -190,6 +190,7 @@ func send_wave(hero_data_list: Array[HeroData]) -> void:
 
 		hero.configure(scaled_max_health, scaled_damage, scaled_armor, scaled_attack_speed, hero_data.abilities)
 		hero.is_melee = hero_data.is_melee
+		hero.projectile_color = hero_data.projectile_color
 		hero.name = "Hero_%s" % hero_data.hero_name
 
 		var offset: Vector2 = offsets[i]
@@ -428,6 +429,7 @@ func _spawn_monster_group(room_data: RoomData, at_position: Vector2) -> Array[Co
 		add_child(monster)
 		monster.configure(room_data.monster.max_health, room_data.monster.damage, room_data.monster.armor, room_data.monster.attack_speed, room_data.monster.abilities)
 		monster.is_melee = room_data.monster.is_melee
+		monster.projectile_color = room_data.monster.projectile_color
 		monster.position = at_position + Vector2(0, (i - (count - 1) / 2.0) * 40.0)
 
 		if monster.has_node("Body/Label"):

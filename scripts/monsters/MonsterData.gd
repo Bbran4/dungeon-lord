@@ -20,3 +20,6 @@ class_name MonsterData
 ## Dungeon._charge_melee_into_combat). Defaults true - all current
 ## monster content is melee.
 @export var is_melee : bool = true
+## Tint for this monster's ranged CombatProjectile visuals. Unused if
+## is_melee is true.
+@export var projectile_color : Color = Color.WHITE

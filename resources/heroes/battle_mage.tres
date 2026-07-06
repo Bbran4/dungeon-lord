@@ -2,14 +2,19 @@
 
 [ext_resource type="Script" uid="uid://cjwm4rv0y2emj" path="res://scripts/heroes/HeroData.gd" id="1_dnq5u"]
 [ext_resource type="Script" uid="uid://gwfofjo7s5bk" path="res://scripts/abilities/AbilityData.gd" id="1_gxaan"]
+[ext_resource type="Resource" uid="uid://blyicyqq7hcvg" path="res://resources/ablilities/mage_chain_lightning.tres" id="2_emv7n"]
+[ext_resource type="Resource" uid="uid://bar6qvehj54gl" path="res://resources/ablilities/mage_fireball.tres" id="3_7xu0h"]
+[ext_resource type="Resource" uid="uid://bcd25d8abcafh" path="res://resources/ablilities/mage_ice_spike.tres" id="4_1oh6s"]
 
 [resource]
 script = ExtResource("1_dnq5u")
 hero_name = "Battlemage"
 max_health = 14
 damage = 7
+abilities = Array[ExtResource("1_gxaan")]([ExtResource("2_emv7n"), ExtResource("3_7xu0h"), ExtResource("4_1oh6s")])
 class_type = "Mage"
 priority = 2
 gold_value = 25
 is_melee = false
+projectile_color = Color(0.8808251, 0.48452926, 0.9309246, 1)
 metadata/_custom_type_script = "uid://cjwm4rv0y2emj"

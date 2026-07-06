@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="AbilityData" format=3 uid="uid://blyicyqq7hcvg"]
+
+[ext_resource type="Script" uid="uid://gwfofjo7s5bk" path="res://scripts/abilities/AbilityData.gd" id="1_38c2a"]
+
+[resource]
+script = ExtResource("1_38c2a")
+ability_name = "Chain Lightning"
+ability_type = 6
+cooldown = 9.0
+magnitude = 8
+chain_count = 2
+metadata/_custom_type_script = "uid://gwfofjo7s5bk"
