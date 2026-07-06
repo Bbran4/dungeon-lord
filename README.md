@@ -107,6 +107,13 @@ Spend gold to:
 * Purchase card packs
 * Improve your boss
 
+> **Status:** implemented. Gold is earned per-hero based on how much
+> damage they took relative to their effective max health (base max
+> health plus any healing received), not from winning fights or clearing
+> rooms — killing monsters or reaching the exit alive earns nothing on
+> its own. A full party wipe (zero heroes escape) pays an additional
+> bonus scaled off the party's combined value. See `EconomyManager.gd`.
+
 ### Dark Essence
 
 Permanent progression currency earned after each run.
@@ -317,10 +324,12 @@ Examples:
 
 Everything should be data-driven using Godot Resources.
 
-> **Status:** the `Resource` classes below are all implemented and drive
-> gameplay. However, actual content (the skeleton room, the test hero,
-> etc.) is still being constructed procedurally in `TestHarness.gd`
-> rather than authored as `.tres` files — see Next Steps.
+> **Status:** implemented. The `Resource` classes below all drive
+> gameplay, and content is now authored as real `.tres` files under
+> `resources/` (skeleton monster/room tiers, the test hero) rather than
+> constructed in code. `TestHarness.gd` just wires those files in via
+> `@export` fields — adding a new monster, room, or hero variant no
+> longer requires touching any script.
 
 ---
 
@@ -341,8 +350,13 @@ scripts/
 	biomes/        # BiomeData
 	cards/         # CardData
 	managers/      # GameManager, EconomyManager, WaveManager,
-				   # DungeonManager, CombatManager, HeroManager
+	               # DungeonManager, CombatManager, HeroManager
 	test/          # TestHarness (manual playtest scene driver)
+
+resources/
+	rooms/         # skeleton_den.tres, skeleton_den_upgraded.tres
+	monsters/      # skeleton.tres, elite_skeleton.tres
+	heroes/        # test_adventurer.tres
 
 scenes/
 	dungeons/      # Dungeon.tscn, DungeonGrid.tscn
@@ -350,9 +364,11 @@ scenes/
 	test/          # TestHarness.tscn, TestHeroEntity.tscn
 ```
 
-`resources/` (authored `.tres` content) and a dedicated `combat/` script
-folder from the original plan don't exist yet — combat logic currently
-lives in `managers/CombatManager.gd` and `core/CombatEntity.gd`.
+`resources/` is now real, authored content (see above), though it's
+still sparse — one room/monster pair and one test hero. A dedicated
+`combat/` script folder from the original plan doesn't exist yet —
+combat logic still lives in `managers/CombatManager.gd` and
+`core/CombatEntity.gd`.
 
 ---
 
@@ -402,6 +418,7 @@ abilities : Array[String]
 class_type : String ("Tank" | "Healer" | "Mage" | "Ranger" | "Rogue")
 priority : int
 sprite : Texture2D
+gold_value : int           # gold earned if 100% of effective max HP is dealt to this hero
 ```
 
 ---
@@ -486,12 +503,17 @@ What's actually playable today, via `scenes/test/TestHarness.tscn`:
 * ✅ Send a hero (or test combat sandbox) through the dungeon; combat auto-resolves room by room
 * ✅ Gold economy, wave counter, and a scrolling event log
 * ✅ Pan (WASD/arrows or middle-mouse drag) and zoom (mouse wheel) camera
+* ✅ `GameManager` gates building actions by phase (insert/upgrade/sell only succeed during BUILDING, enforced in `DungeonGrid`); "Send Wave" transitions to COMBAT, `Dungeon.wave_cleared` transitions to REWARD, which currently loops straight back to BUILDING (no card draft yet)
+* ✅ `HeroManager.spawn_hero`/`remove_hero`/`active_heroes` now backs `Dungeon.gd`'s hero tracking directly — no more private hero counter
+* ✅ Room/monster/hero content authored as real `.tres` resources under `resources/`, wired into `TestHarness` via `@export` fields
+* ✅ Gold is earned per-hero based on damage taken vs. effective max health, plus a full-wipe bonus — not from winning fights or clearing rooms (see `EconomyManager.gd`)
 
 Notably **not yet wired up**, despite the underlying scripts existing:
 
-* ⬜ `GameManager`'s building/combat/reward phase signals aren't connected to anything — the test harness doesn't gate actions by phase
-* ⬜ `HeroManager` (spawn/remove/clear tracking) isn't used by `Dungeon.gd`, which tracks its own active-hero count independently
-* ⬜ No `.tres` authored resources — all test data (`skeleton_room_data`, `test_hero_data`, etc.) is built in code inside `TestHarness.gd`
+* ⬜ No reward-phase content yet — `_on_reward_phase_started` immediately loops back to building since there's no card draft system
+* ⬜ `TrapData` doesn't exist — `RoomData.trap` is still a bare `Resource` placeholder with no combat behavior
+* ⬜ `HeroData.class_type` and hero abilities are unused in behavior — every hero fights identically regardless of class
+* ⬜ `BossData` has no room encounter, phase, or summon logic
 
 > **Architecture note:** the original plan called this a "Dungeon Grid,"
 > but what's implemented is a **linear ordered path** (`DungeonManager`
@@ -527,7 +549,7 @@ Players should constantly think:
 6. ✅ Room Upgrades
 7. 🟡 Wave System *(counter exists; no auto-advance, scaling, or party spawning yet)*
 8. ⬜ Card Drafting
-9. ⬜ Hero Parties *(multi-hero API exists in `Dungeon.send_wave`, untested with >1 hero)*
+9. ⬜ Hero Parties *(multi-hero API exists in `Dungeon.send_wave` and now tracked via `HeroManager`, but untested with >1 hero; classes/abilities still don't affect behavior)*
 10. ⬜ Boss Room
 11. ⬜ Biomes
 12. ⬜ Meta Progression

@@ -7,6 +7,10 @@ class_name Dungeon
 ## since waypoint coordinates from DungeonGrid are used directly as
 ## this node's children's local positions.
 ##
+## Active hero tracking is delegated to HeroManager (spawn_hero/
+## remove_hero/active_heroes) rather than kept locally, so other systems
+## can query or react to the live hero roster later.
+##
 ## Gold is awarded per-hero, once, at the moment they're resolved
 ## (killed or escaped) - based on damage they took over the whole run,
 ## via EconomyManager.award_hero_damage_gold(). If every hero in the
@@ -22,7 +26,6 @@ signal wave_cleared
 @export var move_speed: float = 200.0
 @export var hero_spawn_delay: float = 1.0
 
-var _active_hero_count: int = 0
 var _heroes_escaped_count: int = 0
 var _heroes_died_count: int = 0
 var _current_wave_hero_data: Array[HeroData] = []
@@ -30,7 +33,10 @@ var _current_wave_hero_data: Array[HeroData] = []
 
 func send_wave(hero_data_list: Array[HeroData]) -> void:
 
-	_active_hero_count = hero_data_list.size()
+	# Safety net: clears out any stale entries if a previous wave was
+	# interrupted (e.g. a mid-combat reset) before it fully resolved.
+	HeroManager.clear_heroes()
+
 	_heroes_escaped_count = 0
 	_heroes_died_count = 0
 	_current_wave_hero_data = hero_data_list.duplicate()
@@ -42,8 +48,7 @@ func send_wave(hero_data_list: Array[HeroData]) -> void:
 
 func _spawn_and_run_hero(hero_data: HeroData) -> void:
 
-	var hero: CombatEntity = hero_scene.instantiate() as CombatEntity
-	add_child(hero)
+	var hero: CombatEntity = HeroManager.spawn_hero(hero_scene, self) as CombatEntity
 	hero.configure(hero_data.max_health, hero_data.damage, hero_data.armor)
 	hero.name = "Hero_%s" % hero_data.hero_name
 
@@ -113,17 +118,19 @@ func _spawn_monster_entity(monster_data: MonsterData) -> CombatEntity:
 
 
 ## Hero already freed itself via CombatEntity.die() -> queue_free() by
-## the time this runs, so it must NOT be queue_free()'d again here (see
-## the double-free note in HeroManager.remove_hero()). Gold is read from
-## the hero before this frame ends, while the instance is still valid.
+## the time this runs. HeroManager.remove_hero() only updates tracking
+## (it does NOT call queue_free()), so this is safe to call on an
+## already-dying hero - see the double-free note in HeroManager.gd.
 func _on_hero_died(hero: CombatEntity, hero_data: HeroData) -> void:
 	EconomyManager.award_hero_damage_gold(hero, hero_data)
+	HeroManager.remove_hero(hero)
 	_heroes_died_count += 1
 	_on_hero_resolved()
 
 
 func _on_hero_escaped(hero: CombatEntity, hero_data: HeroData) -> void:
 	EconomyManager.award_hero_damage_gold(hero, hero_data)
+	HeroManager.remove_hero(hero)
 	_heroes_escaped_count += 1
 	hero_escaped.emit(hero)
 	hero.queue_free()
@@ -132,9 +139,7 @@ func _on_hero_escaped(hero: CombatEntity, hero_data: HeroData) -> void:
 
 func _on_hero_resolved() -> void:
 
-	_active_hero_count -= 1
-
-	if _active_hero_count <= 0:
+	if HeroManager.active_heroes.is_empty():
 
 		if _heroes_escaped_count == 0 and _heroes_died_count > 0:
 			EconomyManager.award_wipe_bonus(_current_wave_hero_data)
