@@ -5,6 +5,12 @@ class_name TestHarness
 ## card onto a room to upgrade it, click a room to sell it, and send a
 ## hero through the dungeon.
 ##
+## GameManager now gates the loop: building actions (insert/upgrade/sell,
+## enforced in DungeonGrid) only succeed during BUILDING. Pressing
+## "Send Wave" transitions to COMBAT; Dungeon.wave_cleared transitions
+## to REWARD, which - with no card draft system yet - immediately loops
+## back to a fresh BUILDING phase.
+##
 ## Assumes these are autoload singletons (Project Settings -> Autoload):
 ## GameManager, EconomyManager, DungeonManager, WaveManager, CombatManager
 
@@ -12,9 +18,12 @@ class_name TestHarness
 @onready var dungeon_grid: DungeonGrid = $Dungeon/DungeonGrid
 @onready var gold_label: Label = $CanvasLayer/UI/VBox/GoldLabel
 @onready var wave_label: Label = $CanvasLayer/UI/VBox/WaveLabel
+@onready var phase_label: Label = $CanvasLayer/UI/VBox/PhaseLabel
 @onready var log_text: RichTextLabel = $CanvasLayer/UI/VBox/LogText
 @onready var skeleton_card: RoomCard = $CanvasLayer/UI/VBox/Palette/SkeletonCard
 @onready var skeleton_upgraded_card: RoomCard = $CanvasLayer/UI/VBox/Palette/SkeletonUpgradedCard
+@onready var send_wave_button: Button = $CanvasLayer/UI/VBox/Buttons/SendWaveButton
+@onready var next_wave_button: Button = $CanvasLayer/UI/VBox/Buttons2/NextWaveButton
 
 var skeleton_monster_data: MonsterData
 var skeleton_room_data: RoomData
@@ -61,6 +70,7 @@ func _build_test_data() -> void:
 	test_hero_data.damage = 4
 	test_hero_data.armor = 1
 	test_hero_data.class_type = "Tank"
+	test_hero_data.gold_value = 20
 
 	skeleton_card.set_room_data(skeleton_room_data)
 	skeleton_upgraded_card.set_room_data(skeleton_room_upgraded_data)
@@ -73,6 +83,10 @@ func _connect_signals() -> void:
 	CombatManager.combat_finished.connect(_on_combat_finished)
 	dungeon.hero_escaped.connect(_on_hero_escaped)
 	dungeon.wave_cleared.connect(_on_wave_cleared)
+
+	GameManager.building_phase_started.connect(_on_building_phase_started)
+	GameManager.combat_phase_started.connect(_on_combat_phase_started)
+	GameManager.reward_phase_started.connect(_on_reward_phase_started)
 
 	skeleton_card.drag_started.connect(_on_card_drag_started)
 	skeleton_card.drag_ended.connect(_on_card_drag_ended)
@@ -88,6 +102,7 @@ func _reset_test() -> void:
 	_on_gold_changed(EconomyManager.gold)
 	wave_label.text = "Wave: %d" % WaveManager.current_wave
 	_log("Test harness reset. Drag a room card into a highlighted gap to build.")
+	GameManager.start_game()
 
 
 func _on_card_drag_started(room_data: RoomData) -> void:
@@ -126,6 +141,12 @@ func _on_fight_pressed() -> void:
 
 
 func _on_send_wave_pressed() -> void:
+
+	if GameManager.current_state != GameEnums.GameState.BUILDING:
+		_log("Can't send a wave right now.")
+		return
+
+	GameManager.start_combat_phase()
 	_log("Sending test hero into the dungeon...")
 	dungeon.send_wave([test_hero_data])
 
@@ -136,9 +157,14 @@ func _on_hero_escaped(hero: CombatEntity) -> void:
 
 func _on_wave_cleared() -> void:
 	_log("Wave cleared (all heroes dealt with).")
+	GameManager.start_reward_phase()
 
 
 func _on_next_wave_pressed() -> void:
+
+	if GameManager.current_state != GameEnums.GameState.BUILDING:
+		return
+
 	WaveManager.start_next_wave()
 
 
@@ -150,7 +176,6 @@ func _on_combatant_died(entity: CombatEntity) -> void:
 	_log("%s died." % entity.name)
 
 
-# _on_combat_finished loses its gold-granting branch, logging only:
 func _on_combat_finished(winner: CombatEntity, loser: CombatEntity) -> void:
 
 	if not is_instance_valid(winner):
@@ -171,6 +196,33 @@ func _on_wave_started(wave_number: int) -> void:
 
 func _on_wave_completed(wave_number: int) -> void:
 	_log("Wave %d completed." % wave_number)
+
+
+func _on_building_phase_started() -> void:
+	phase_label.text = "Phase: Building"
+	send_wave_button.disabled = false
+	next_wave_button.disabled = false
+	skeleton_card.disabled = false
+	skeleton_upgraded_card.disabled = false
+	skeleton_card.mouse_filter = Control.MOUSE_FILTER_STOP
+	skeleton_upgraded_card.mouse_filter = Control.MOUSE_FILTER_STOP
+
+
+func _on_combat_phase_started() -> void:
+	phase_label.text = "Phase: Combat"
+	send_wave_button.disabled = true
+	next_wave_button.disabled = true
+	skeleton_card.disabled = true
+	skeleton_upgraded_card.disabled = true
+	skeleton_card.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	skeleton_upgraded_card.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+
+func _on_reward_phase_started() -> void:
+	phase_label.text = "Phase: Reward"
+	_log("Reward phase. (No card draft yet - looping back to building.)")
+	WaveManager.complete_wave()
+	GameManager.start_building_phase()
 
 
 func _log(message: String) -> void:

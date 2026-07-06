@@ -44,6 +44,9 @@ func _on_dungeon_changed(_a: Variant = null, _b: Variant = null) -> void:
 ## Spends gold and inserts a room at `index`. Used by RoomGapZone drops.
 func request_insert(index: int, room_data: RoomData) -> bool:
 
+	if GameManager.current_state != GameEnums.GameState.BUILDING:
+		return false
+
 	if room_data == null:
 		return false
 
@@ -64,6 +67,9 @@ func request_insert(index: int, room_data: RoomData) -> bool:
 ## Spends the cost difference and upgrades the room at `index`.
 func request_upgrade(index: int) -> bool:
 
+	if GameManager.current_state != GameEnums.GameState.BUILDING:
+		return false
+
 	var current: RoomData = DungeonManager.get_room(index)
 
 	if current == null or current.upgrade_path == null:
@@ -81,6 +87,9 @@ func request_upgrade(index: int) -> bool:
 
 ## Removes the room at `index` and refunds half its cost.
 func sell_room_at(index: int) -> bool:
+
+	if GameManager.current_state != GameEnums.GameState.BUILDING:
+		return false
 
 	var room_data: RoomData = DungeonManager.get_room(index)
 
