@@ -10,7 +10,9 @@
 [ext_resource type="Resource" uid="uid://wsqihl823exw" path="res://resources/rooms/skeleton_den_elite.tres" id="4_cun6h"]
 [ext_resource type="Resource" uid="uid://bol2exvqplv0u" path="res://resources/rooms/spike_corridor.tres" id="4_igh42"]
 [ext_resource type="Resource" uid="uid://ditq6i4hyf4kn" path="res://resources/heroes/tank_knight.tres" id="6_iwcrh"]
+[ext_resource type="Resource" uid="uid://dstqqk11egmt2" path="res://resources/rooms/poison_arrow_corridor.tres" id="7_55fa2"]
 [ext_resource type="Resource" uid="uid://pqg84vdw3wfg" path="res://resources/heroes/cleric_healer.tres" id="7_cun6h"]
+[ext_resource type="Resource" uid="uid://c05of0rch36uw" path="res://resources/rooms/sanctuary_room.tres" id="8_l2txw"]
 [ext_resource type="Resource" uid="uid://bi6f5sc2hj8js" path="res://resources/heroes/ranger_scout.tres" id="8_whyqk"]
 [ext_resource type="Resource" uid="uid://cboygfugp7xf4" path="res://resources/heroes/battle_mage.tres" id="9_55fa2"]
 [ext_resource type="Resource" uid="uid://caiy4bqh2vn3o" path="res://resources/heroes/shadow_rogue.tres" id="10_l2txw"]
@@ -22,6 +24,8 @@ skeleton_room_upgraded_data = ExtResource("3_igh42")
 skeleton_room_elite_data = ExtResource("4_cun6h")
 spike_corridor_room_data = ExtResource("4_igh42")
 test_hero_data = ExtResource("4_2sunf")
+poison_arrow_room_data = ExtResource("7_55fa2")
+sanctuary_room_data = ExtResource("8_l2txw")
 tank_hero_data = ExtResource("6_iwcrh")
 healer_hero_data = ExtResource("7_cun6h")
 ranger_hero_data = ExtResource("8_whyqk")
@@ -95,6 +99,20 @@ custom_minimum_size = Vector2(120, 60)
 layout_mode = 2
 text = "Spike Corridor
 40g"
+script = ExtResource("3")
+
+[node name="PoisonArrowCard" type="Button" parent="CanvasLayer/UI/VBox/Palette" unique_id=656450699]
+custom_minimum_size = Vector2(120, 60)
+layout_mode = 2
+text = "Poison Arrow Corridor
+45g"
+script = ExtResource("3")
+
+[node name="SanctuaryCard" type="Button" parent="CanvasLayer/UI/VBox/Palette" unique_id=321979614]
+custom_minimum_size = Vector2(120, 60)
+layout_mode = 2
+text = "Sanctuary
+60g"
 script = ExtResource("3")
 
 [node name="Buttons" type="HBoxContainer" parent="CanvasLayer/UI/VBox" unique_id=1412035313]

@@ -16,18 +16,29 @@ class_name Dungeon
 ## simple spawn order: Tank at the front (closest to the monster line),
 ## Ranger/Mage in the middle, Healer at the back, Rogue positioned past
 ## the monster line entirely (flanking). See _compute_formation_offsets.
-## This is purely positional for now - it does not yet affect who
-## monsters or heroes target (see CombatManager for threat/aggro).
+##
+## MOVEMENT SLOWDOWN: the party moves at room_danger_speed_multiplier
+## (< 1.0) while approaching any room containing a monster or a trap -
+## this is what gives a PROJECTILE trap more chances to land a hit,
+## since the party lingers in the arrow's path longer.
+##
+## PROJECTILE TRAPS: a PoisonArrowTrapController is spawned right before
+## the party starts moving toward a room with a PROJECTILE-type trap,
+## and freed right after that room is fully resolved - it fires pooled
+## TrapArrow projectiles continuously for that whole window. INSTANT
+## traps are unaffected and still resolve as a single probabilistic hit
+## per hero on arrival.
+##
+## UTILITY ROOMS: arriving at a room with room_type == "Utility" applies
+## its one-time/ongoing effects via _apply_utility_room - optionally
+## healing the whole living party, and multiplying _gold_multiplier /
+## _trap_damage_multiplier for the REST of the wave (both reset to 1.0
+## at the start of each new wave in send_wave()).
 ##
 ## WAVE SCALING: hero stats (max health, damage, armor, attack speed)
 ## AND gold_value are all scaled by WaveManager.current_stat_multiplier()
 ## at spawn time - HeroData resources themselves are never mutated,
-## since they're shared assets. Scaling gold_value by the same
-## multiplier as max_health keeps the gold-per-damage-point rate
-## constant across tiers (see EconomyManager.award_hero_damage_gold).
-## The multiplier only increases when the Dungeon Lord fully wipes a
-## party (see wave_cleared below and WaveManager.gd) - escaping heroes
-## send the same-strength party again next time.
+## since they're shared assets.
 ##
 ## Expects a child node named "DungeonGrid" positioned at local origin,
 ## since waypoint coordinates from DungeonGrid are used directly as
@@ -49,13 +60,6 @@ class_name Dungeon
 ## is_instance_valid() BEFORE anything ever touches a CombatEntity-typed
 ## slot.
 ##
-## A room may carry a trap, a monster group, or both. Traps resolve
-## first, individually per living hero - a single probabilistic damage
-## instance with no counter-attack, no CombatManager involvement. Room
-## monsters resolve as a group encounter for whoever in the party is
-## still alive; a room can field more than one monster via
-## RoomData.monster_count (e.g. a Skeleton Den fielding 3 Skeletons).
-##
 ## Gold is awarded per-hero, once, at the moment they're resolved
 ## (killed or escaped), via EconomyManager.award_hero_damage_gold(). If
 ## every hero in the wave dies with none escaping,
@@ -71,7 +75,15 @@ signal wave_cleared(full_wipe: bool)
 
 @export var hero_scene: PackedScene
 @export var monster_scene: PackedScene
+@export var trap_arrow_scene: PackedScene
 @export var move_speed: float = 200.0
+
+## Multiplier applied to move_speed while the party approaches a room
+## containing a monster or a trap. < 1.0 = slower, giving traps and
+## monsters more exposure time.
+@export var room_danger_speed_multiplier: float = 0.5
+
+@export var arrow_pool_size: int = 6
 
 ## Forward (x, relative to the party's shared waypoint) offset per
 ## class_type. Positive = further along the path, i.e. closer to
@@ -103,6 +115,15 @@ var _party: Array[Dictionary] = []
 ## wave ends.
 var _room_monsters: Dictionary = {}
 
+var _arrow_pool: Array[TrapArrow] = []
+
+## Runtime modifiers set by utility rooms, reset each wave. Applied at
+## gold-award time and at trap-damage time respectively (see
+## _apply_utility_room, _handle_hero_death, _resolve_escaped_party,
+## _finish_wave, _resolve_trap_for_member).
+var _gold_multiplier: float = 1.0
+var _trap_damage_multiplier: float = 1.0
+
 
 func send_wave(hero_data_list: Array[HeroData]) -> void:
 
@@ -112,6 +133,8 @@ func send_wave(hero_data_list: Array[HeroData]) -> void:
 
 	_heroes_escaped_count = 0
 	_heroes_died_count = 0
+	_gold_multiplier = 1.0
+	_trap_damage_multiplier = 1.0
 	_party.clear()
 
 	_spawn_all_room_monsters()
@@ -184,15 +207,26 @@ func _run_party() -> void:
 		if _living_party_entities().is_empty():
 			return
 
-		await _move_party_to(waypoints[i])
-
 		var room_data: RoomData = dungeon_grid.get_room_data_at_path_index(i)
+		var is_dangerous: bool = room_data != null and (room_data.monster != null or room_data.trap != null)
+		var speed_multiplier: float = room_danger_speed_multiplier if is_dangerous else 1.0
 
-		if room_data != null and room_data.trap != null:
+		var projectile_controller: PoisonArrowTrapController = null
+
+		if room_data != null and room_data.trap != null and room_data.trap.trap_type == GameEnums.TrapType.PROJECTILE:
+			projectile_controller = _spawn_projectile_trap(room_data.trap, waypoints[i])
+
+		await _move_party_to(waypoints[i], speed_multiplier)
+
+		if room_data != null and room_data.room_type == "Utility":
+			_apply_utility_room(room_data)
+
+		if room_data != null and room_data.trap != null and room_data.trap.trap_type == GameEnums.TrapType.INSTANT:
 			for member: Dictionary in _party:
 				_resolve_trap_for_member(member, room_data.trap)
 
 		if _living_party_entities().is_empty():
+			_free_projectile_trap(projectile_controller)
 			_finish_wave()
 			return
 
@@ -215,8 +249,11 @@ func _run_party() -> void:
 			_resolve_dead_party_members()
 
 			if _living_party_entities().is_empty():
+				_free_projectile_trap(projectile_controller)
 				_finish_wave()
 				return
+
+		_free_projectile_trap(projectile_controller)
 
 	_resolve_escaped_party()
 
@@ -241,7 +278,7 @@ func _living_party_entities() -> Array[CombatEntity]:
 	return living
 
 
-func _move_party_to(waypoint: Vector2) -> void:
+func _move_party_to(waypoint: Vector2, speed_multiplier: float = 1.0) -> void:
 
 	# NOTE: deliberately does NOT await any Tween's `finished` signal.
 	# If a Tween's target node is freed while it's still running (e.g. a
@@ -251,6 +288,7 @@ func _move_party_to(waypoint: Vector2) -> void:
 	# already known up front, waiting on a plain timer for the longest
 	# one sidesteps that failure mode entirely.
 	var max_duration: float = 0.0
+	var effective_speed: float = move_speed * speed_multiplier
 
 	for member: Dictionary in _party:
 
@@ -261,7 +299,7 @@ func _move_party_to(waypoint: Vector2) -> void:
 
 		var target: Vector2 = waypoint + member["offset"]
 		var distance: float = hero.position.distance_to(target)
-		var duration: float = distance / move_speed if move_speed > 0.0 else 0.0
+		var duration: float = distance / effective_speed if effective_speed > 0.0 else 0.0
 
 		if duration <= 0.0:
 			hero.position = target
@@ -274,6 +312,7 @@ func _move_party_to(waypoint: Vector2) -> void:
 
 	if max_duration > 0.0:
 		await get_tree().create_timer(max_duration).timeout
+
 
 ## Spawns every room's monster group up front, all at once, positioned
 ## at that room's waypoint. Monsters stay put there for the rest of the
@@ -321,11 +360,62 @@ func _spawn_monster_group(room_data: RoomData, at_position: Vector2) -> Array[Co
 	return monsters
 
 
-## Single probabilistic damage instance - no counter-attack, no spawned
-## entity, no CombatManager. A miss (roll above trigger_chance) does
-## nothing at all. Damage still flows through CombatEntity.take_damage
-## so it counts toward damage_taken (and therefore gold) exactly like
-## damage from monster combat.
+func _ensure_arrow_pool() -> void:
+
+	if not _arrow_pool.is_empty() or trap_arrow_scene == null:
+		return
+
+	for i: int in arrow_pool_size:
+		var arrow: TrapArrow = trap_arrow_scene.instantiate() as TrapArrow
+		add_child(arrow)
+		arrow.visible = false
+		_arrow_pool.append(arrow)
+
+
+func _spawn_projectile_trap(trap_data: TrapData, at_position: Vector2) -> PoisonArrowTrapController:
+
+	_ensure_arrow_pool()
+
+	var controller: PoisonArrowTrapController = PoisonArrowTrapController.new()
+	add_child(controller)
+	controller.position = at_position
+	controller.setup(trap_data, _arrow_pool, Callable(self, "_living_party_entities"), _trap_damage_multiplier)
+
+	controller.trap_fired.connect(func(hero: CombatEntity) -> void:
+		if is_instance_valid(hero):
+			trap_triggered.emit(hero, trap_data)
+	)
+
+	controller.start()
+
+	return controller
+
+
+func _free_projectile_trap(controller: PoisonArrowTrapController) -> void:
+	if controller != null and is_instance_valid(controller):
+		controller.stop()
+		controller.queue_free()
+
+
+## Applies a Utility room's one-time/ongoing effects. Multipliers stack
+## multiplicatively across multiple utility rooms passed in one wave.
+func _apply_utility_room(room_data: RoomData) -> void:
+
+	if room_data.heal_party_on_entry:
+		for member: Dictionary in _party:
+			if _is_alive(member["entity"]):
+				var hero: CombatEntity = member["entity"]
+				hero.heal(hero.max_health)
+
+	_gold_multiplier *= room_data.gold_multiplier
+	_trap_damage_multiplier *= room_data.trap_damage_multiplier
+
+
+## Single probabilistic damage instance for INSTANT traps only - no
+## counter-attack, no spawned entity, no CombatManager. A miss (roll
+## above trigger_chance) does nothing at all. Damage still flows
+## through CombatEntity.take_damage so it counts toward damage_taken
+## (and therefore gold) exactly like damage from monster combat.
 func _resolve_trap_for_member(member: Dictionary, trap_data: TrapData) -> void:
 
 	if not _is_alive(member["entity"]):
@@ -336,7 +426,8 @@ func _resolve_trap_for_member(member: Dictionary, trap_data: TrapData) -> void:
 	if randf() > trap_data.trigger_chance:
 		return
 
-	hero.take_damage(trap_data.damage, trap_data.ignores_armor)
+	var amount: int = int(round(trap_data.damage * _trap_damage_multiplier))
+	hero.take_damage(amount, trap_data.ignores_armor)
 	trap_triggered.emit(hero, trap_data)
 
 	if not _is_alive(member["entity"]):
@@ -365,7 +456,8 @@ func _handle_hero_death(member: Dictionary) -> void:
 
 	if _is_alive(member["entity"]):
 		var hero: CombatEntity = member["entity"]
-		EconomyManager.award_hero_damage_gold(hero, member["gold_value"])
+		var gold_value: int = int(round(member["gold_value"] * _gold_multiplier))
+		EconomyManager.award_hero_damage_gold(hero, gold_value)
 		HeroManager.remove_hero(hero)
 
 	_heroes_died_count += 1
@@ -384,8 +476,9 @@ func _resolve_escaped_party() -> void:
 			continue
 
 		var hero: CombatEntity = member["entity"]
+		var gold_value: int = int(round(member["gold_value"] * _gold_multiplier))
 
-		EconomyManager.award_hero_damage_gold(hero, member["gold_value"])
+		EconomyManager.award_hero_damage_gold(hero, gold_value)
 		HeroManager.remove_hero(hero)
 		_heroes_escaped_count += 1
 		hero_escaped.emit(hero)
@@ -412,6 +505,8 @@ func _finish_wave() -> void:
 
 		for member: Dictionary in _party:
 			total_gold_value += member["gold_value"]
+
+		total_gold_value = int(round(total_gold_value * _gold_multiplier))
 
 		EconomyManager.award_wipe_bonus(total_gold_value)
 

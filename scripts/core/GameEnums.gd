@@ -47,3 +47,8 @@ enum AbilityTargetRule {
 	LOWEST_HP_ALLY,
 	SELF
 }
+
+enum TrapType {
+	INSTANT,
+	PROJECTILE
+}

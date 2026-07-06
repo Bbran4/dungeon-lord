@@ -38,6 +38,8 @@ class_name TestHarness
 @onready var spike_card: RoomCard = $CanvasLayer/UI/VBox/Palette/SpikeCorridorCard
 @onready var send_wave_button: Button = $CanvasLayer/UI/VBox/Buttons/SendWaveButton
 @onready var next_wave_button: Button = $CanvasLayer/UI/VBox/Buttons2/NextWaveButton
+@onready var poison_arrow_card: RoomCard = $CanvasLayer/UI/VBox/Palette/PoisonArrowCard
+@onready var sanctuary_card: RoomCard = $CanvasLayer/UI/VBox/Palette/SanctuaryCard
 
 ## Authored content - assign these in the Inspector (or via the scene
 ## file) to point at .tres resources under res://resources/.
@@ -46,6 +48,8 @@ class_name TestHarness
 @export var skeleton_room_elite_data: RoomData
 @export var spike_corridor_room_data: RoomData
 @export var test_hero_data: HeroData
+@export var poison_arrow_room_data: RoomData
+@export var sanctuary_room_data: RoomData
 
 @export var tank_hero_data: HeroData
 @export var healer_hero_data: HeroData
@@ -67,7 +71,11 @@ func _connect_signals() -> void:
 	dungeon.hero_escaped.connect(_on_hero_escaped)
 	dungeon.wave_cleared.connect(_on_wave_cleared)
 	dungeon.trap_triggered.connect(_on_trap_triggered)
-
+	poison_arrow_card.drag_started.connect(_on_card_drag_started)
+	poison_arrow_card.drag_ended.connect(_on_card_drag_ended)
+	sanctuary_card.drag_started.connect(_on_card_drag_started)
+	sanctuary_card.drag_ended.connect(_on_card_drag_ended)
+	
 	GameManager.building_phase_started.connect(_on_building_phase_started)
 	GameManager.combat_phase_started.connect(_on_combat_phase_started)
 	GameManager.reward_phase_started.connect(_on_reward_phase_started)
@@ -92,7 +100,9 @@ func _reset_test() -> void:
 	skeleton_upgraded_card.set_room_data(skeleton_room_upgraded_data)
 	skeleton_elite_card.set_room_data(skeleton_room_elite_data)
 	spike_card.set_room_data(spike_corridor_room_data)
-
+	poison_arrow_card.set_room_data(poison_arrow_room_data)
+	sanctuary_card.set_room_data(sanctuary_room_data)
+	
 	_on_gold_changed(EconomyManager.gold)
 	_update_wave_label(WaveManager.current_wave)
 	_log("Test harness reset. Drag a room card into a highlighted gap to build.")
@@ -229,7 +239,7 @@ func _on_building_phase_started() -> void:
 	phase_label.text = "Phase: Building"
 	send_wave_button.disabled = false
 	next_wave_button.disabled = false
-	for card: RoomCard in [skeleton_card, skeleton_upgraded_card, skeleton_elite_card, spike_card]:
+	for card: RoomCard in [skeleton_card, skeleton_upgraded_card, skeleton_elite_card, spike_card, poison_arrow_card, sanctuary_card]:
 		card.disabled = false
 		card.mouse_filter = Control.MOUSE_FILTER_STOP
 
@@ -238,7 +248,7 @@ func _on_combat_phase_started() -> void:
 	phase_label.text = "Phase: Combat"
 	send_wave_button.disabled = true
 	next_wave_button.disabled = true
-	for card: RoomCard in [skeleton_card, skeleton_upgraded_card, skeleton_elite_card, spike_card]:
+	for card: RoomCard in [skeleton_card, skeleton_upgraded_card, skeleton_elite_card, spike_card, poison_arrow_card, sanctuary_card]:
 		card.disabled = true
 		card.mouse_filter = Control.MOUSE_FILTER_IGNORE
 

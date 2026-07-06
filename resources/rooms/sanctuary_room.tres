@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="RoomData" format=3 uid="uid://c05of0rch36uw"]
+
+[ext_resource type="Script" uid="uid://dx42j73ykak67" path="res://scripts/rooms/RoomData.gd" id="1_idyc3"]
+
+[resource]
+script = ExtResource("1_idyc3")
+room_name = "Sanctuary"
+cost = 60
+room_type = "Utility"
+rarity = "Rare"
+heal_party_on_entry = true
+gold_multiplier = 1.5
+metadata/_custom_type_script = "uid://dx42j73ykak67"

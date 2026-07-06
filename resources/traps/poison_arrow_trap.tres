@@ -1,0 +1,10 @@
+[gd_resource type="Resource" script_class="TrapData" format=3 uid="uid://chhiyc4k87qq1"]
+
+[ext_resource type="Script" uid="uid://ipo3kb65irpf" path="res://scripts/traps/TrapData.gd" id="1_w6c40"]
+
+[resource]
+script = ExtResource("1_w6c40")
+trap_name = "Poison Arrow Trap"
+damage = 4
+trap_type = 1
+metadata/_custom_type_script = "uid://ipo3kb65irpf"
