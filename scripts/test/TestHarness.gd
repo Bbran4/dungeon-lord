@@ -79,7 +79,8 @@ func _connect_signals() -> void:
 	GameManager.building_phase_started.connect(_on_building_phase_started)
 	GameManager.combat_phase_started.connect(_on_combat_phase_started)
 	GameManager.reward_phase_started.connect(_on_reward_phase_started)
-
+	GameManager.victory_started.connect(_on_victory_started)
+	
 	skeleton_card.drag_started.connect(_on_card_drag_started)
 	skeleton_card.drag_ended.connect(_on_card_drag_ended)
 	skeleton_upgraded_card.drag_started.connect(_on_card_drag_started)
@@ -192,7 +193,8 @@ func _on_hero_escaped(hero: CombatEntity) -> void:
 
 ## full_wipe comes straight from Dungeon.wave_cleared - true only if
 ## every hero in the wave died with none escaping. This is what decides
-## whether WaveManager advances the difficulty tier.
+## whether WaveManager advances the difficulty tier - and, if that
+## advance lands on WaveManager.max_wave, whether the run is WON.
 func _on_wave_cleared(full_wipe: bool) -> void:
 
 	if full_wipe:
@@ -201,8 +203,22 @@ func _on_wave_cleared(full_wipe: bool) -> void:
 		_log("Some heroes escaped. The dungeon must hold before growing stronger.")
 
 	WaveManager.complete_wave(full_wipe)
+
+	if full_wipe and WaveManager.is_at_max_wave():
+		GameManager.start_victory()
+		return
+
 	GameManager.start_reward_phase()
 
+## Terminal - nothing re-enables these controls except a full reset.
+func _on_victory_started() -> void:
+	phase_label.text = "Phase: VICTORY"
+	send_wave_button.disabled = true
+	next_wave_button.disabled = true
+	for card: RoomCard in [skeleton_card, skeleton_upgraded_card, skeleton_elite_card, spike_card, poison_arrow_card, sanctuary_card]:
+		card.disabled = true
+		card.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_log("🏆 VICTORY! The dungeon held through wave %d!" % WaveManager.max_wave)
 
 func _on_next_wave_pressed() -> void:
 	# Wave tier now advances automatically based on combat outcome (see

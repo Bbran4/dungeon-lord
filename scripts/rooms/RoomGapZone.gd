@@ -13,6 +13,12 @@ const HOVER_PLUS_ALPHA: float = 1.0
 var _highlight: ColorRect
 var _plus_label: Label
 
+## When true, this gap zone is at the dungeon's room cap - it never
+## shows itself during a drag and never accepts a drop, regardless of
+## what's being dragged. Set by DungeonGrid whenever the room count
+## changes (see DungeonGrid._update_gap_zone_lock_state).
+var locked: bool = false
+
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_STOP
@@ -44,13 +50,26 @@ func _ready() -> void:
 	add_child(_plus_label)
 
 
+## Called by DungeonGrid whenever the room count crosses the cap in
+## either direction. Locking forcibly hides the zone even mid-drag.
+func set_locked(value: bool) -> void:
+	locked = value
+	if locked:
+		visible = false
+		_set_hovered(false)
+
+
 func _can_drop_data(_at_position: Vector2, data: Variant) -> bool:
+	if locked:
+		return false
 	var can_drop: bool = data is RoomData
 	_set_hovered(can_drop)
 	return can_drop
 
 
 func _drop_data(_at_position: Vector2, data: Variant) -> void:
+	if locked:
+		return
 	_set_hovered(false)
 	if data is RoomData:
 		drop_requested.emit(gap_index, data)
@@ -58,6 +77,8 @@ func _drop_data(_at_position: Vector2, data: Variant) -> void:
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_DRAG_BEGIN:
+		if locked:
+			return
 		visible = get_viewport().gui_get_drag_data() is RoomData
 	elif what == NOTIFICATION_DRAG_END:
 		visible = false

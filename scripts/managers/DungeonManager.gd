@@ -3,6 +3,10 @@ extends Node
 ## Holds the dungeon as an ordered sequence of rooms from entrance to exit.
 ## Rooms are always contiguous (no empty-slot gaps) since the layout is a
 ## linear path rather than a fixed grid.
+## Hard cap on how many rooms the dungeon can hold. DungeonGrid enforces
+## this by rejecting request_insert() once room_count() reaches it, and
+## locking every RoomGapZone so none of them can even accept a drop.
+@export var max_rooms: int = 6
 
 signal dungeon_generated
 signal room_inserted(index: int, room_data: RoomData)

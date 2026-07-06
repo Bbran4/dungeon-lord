@@ -32,7 +32,8 @@ enum GameState {
 	BUILDING,
 	COMBAT,
 	REWARD,
-	GAME_OVER
+	GAME_OVER,
+	VICTORY
 }
 
 enum AbilityType {

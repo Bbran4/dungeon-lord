@@ -12,6 +12,10 @@ extends Node
 ## wipe, 1.2x after the second, 1.3x after the third, and so on (NOT
 ## compounding). See Dungeon.send_wave() for where this actually gets
 ## applied to spawned heroes.
+##
+## max_wave is the run's win condition: reaching it via a full wipe is
+## a VICTORY, not just "tier 11" - see GameManager.start_victory() and
+## TestHarness._on_wave_cleared for where that's actually triggered.
 
 signal wave_started(wave_number: int)
 signal wave_completed(wave_number: int, full_wipe: bool)
@@ -21,6 +25,9 @@ signal wave_completed(wave_number: int, full_wipe: bool)
 ## Stat multiplier increase per tier advanced (0.10 = +10% per tier,
 ## added linearly - tier 3 is +30%, not +33.1%).
 @export var stat_buff_per_wave: float = 0.10
+
+## The tier at which a full wipe counts as winning the run.
+@export var max_wave: int = 10
 
 var current_wave: int = 0
 
@@ -55,3 +62,10 @@ func complete_wave(full_wipe: bool) -> void:
 ## 1.0, 1.1, 1.2, 1.3, ...
 func current_stat_multiplier() -> float:
 	return 1.0 + stat_buff_per_wave * float(current_wave)
+
+
+## True once the Dungeon Lord has survived (fully wiped) max_wave
+## tiers. Checked by the caller (see TestHarness._on_wave_cleared)
+## right after complete_wave() increments current_wave.
+func is_at_max_wave() -> bool:
+	return current_wave >= max_wave

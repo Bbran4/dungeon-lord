@@ -35,7 +35,7 @@ func _ready() -> void:
 
 	_create_markers()
 	_rebuild_layout()
-
+	_update_gap_zone_lock_state()
 
 func _on_dungeon_changed(_a: Variant = null, _b: Variant = null) -> void:
 	_rebuild_layout()
@@ -45,6 +45,9 @@ func _on_dungeon_changed(_a: Variant = null, _b: Variant = null) -> void:
 func request_insert(index: int, room_data: RoomData) -> bool:
 
 	if GameManager.current_state != GameEnums.GameState.BUILDING:
+		return false
+
+	if DungeonManager.room_count() >= DungeonManager.max_rooms:
 		return false
 
 	if room_data == null:
@@ -60,7 +63,9 @@ func request_insert(index: int, room_data: RoomData) -> bool:
 
 	if not inserted:
 		EconomyManager.add_gold(room_data.cost)
-
+		
+	_update_gap_zone_lock_state()
+	
 	return inserted
 
 
@@ -101,7 +106,9 @@ func sell_room_at(index: int) -> bool:
 
 	if removed:
 		EconomyManager.add_gold(refund)
-
+	
+	_update_gap_zone_lock_state()
+	
 	return removed
 
 
@@ -283,6 +290,15 @@ func _on_sell_requested(room: Room) -> void:
 	if index != -1:
 		sell_room_at(index)
 
+## Locks/unlocks every gap zone based on whether the dungeon is
+## currently at its room cap. Called once in _ready() and again after
+## any successful insert or sell, since either can cross the cap.
+func _update_gap_zone_lock_state() -> void:
+
+	var at_cap: bool = DungeonManager.room_count() >= DungeonManager.max_rooms
+
+	for zone: RoomGapZone in gap_zones:
+		zone.set_locked(at_cap)
 
 func _clear_layout() -> void:
 
