@@ -15,9 +15,7 @@ signal room_selected(index: int, room: Room)
 
 @export var room_scene: PackedScene
 @export var room_size: Vector2 = Vector2(500, 500)
-@export var gap_zone_width: float = 120.0
-
-const MARKER_COLOR: Color = Color(0.08, 0.08, 0.08, 0.9)
+@export var gap_width: float = 20.0
 
 var room_nodes: Array[Room] = []
 var gap_zones: Array[RoomGapZone] = []

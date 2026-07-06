@@ -39,11 +39,15 @@ func _spawn_and_run_hero(hero_data: HeroData) -> void:
 
 	for i: int in waypoints.size():
 
-		if not is_instance_valid(hero):
+		if not _is_alive(hero):
 			_on_hero_resolved()
 			return
 
 		await _move_hero_to(hero, waypoints[i])
+
+		if not _is_alive(hero):
+			_on_hero_resolved()
+			return
 
 		var room_data: RoomData = dungeon_grid.get_room_data_at_path_index(i)
 
@@ -56,13 +60,20 @@ func _spawn_and_run_hero(hero_data: HeroData) -> void:
 			if is_instance_valid(monster):
 				monster.queue_free()
 
-			if not is_instance_valid(hero):
+			if not _is_alive(hero):
 				_on_hero_resolved()
 				return
 
 	hero_escaped.emit(hero)
 	hero.queue_free()
 	_on_hero_resolved()
+
+
+## True only if the entity is both a valid instance and not already
+## scheduled for deletion (queue_free() defers the actual free, so
+## is_instance_valid() alone can report true for a frame after death).
+func _is_alive(entity: CombatEntity) -> bool:
+	return is_instance_valid(entity) and not entity.is_queued_for_deletion()
 
 
 func _move_hero_to(hero: CombatEntity, target_position: Vector2) -> void:
