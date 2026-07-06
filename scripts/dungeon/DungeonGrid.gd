@@ -2,17 +2,22 @@ extends Node2D
 class_name DungeonGrid
 
 ## Renders DungeonManager's room sequence as a horizontal path from an
-## entrance to an exit, with drop zones between rooms for building and
-## floating upgrade/sell buttons above individual rooms.
+## entrance to an exit. Rooms sit edge-to-edge (Room's own local origin
+## is its visual center, so this is just `index * room_size.x`); a thin
+## RoomGapZone straddles each seam as a drop target for inserting new
+## rooms, the same way a video editor shows a transition control between
+## two clips. Entrance and exit are drawn as darker placeholder rooms so
+## their footprint is visible even though they hold no RoomData.
 ##
 ## Assumes DungeonManager and EconomyManager are autoload singletons.
 
 signal room_selected(index: int, room: Room)
 
 @export var room_scene: PackedScene
-@export var spacing: float = 600.0
 @export var room_size: Vector2 = Vector2(500, 500)
-@export var gap_width: float = 100.0
+@export var gap_zone_width: float = 120.0
+
+const MARKER_COLOR: Color = Color(0.08, 0.08, 0.08, 0.9)
 
 var room_nodes: Array[Room] = []
 var gap_zones: Array[RoomGapZone] = []
@@ -92,6 +97,8 @@ func sell_room_at(index: int) -> bool:
 
 
 ## Waypoints for hero movement: entrance, then each room slot, then exit.
+## Every position is the vertical center of its room, so a hero walking
+## this path stays centered top-to-bottom the whole way through.
 func get_path_waypoints() -> Array[Vector2]:
 
 	var waypoints: Array[Vector2] = []
@@ -132,23 +139,48 @@ func hide_upgrade_prompts() -> void:
 		room.hide_upgrade_prompt()
 
 
-func _create_markers() -> void:
+## Slot 0 is the entrance, 1..room_count are rooms, room_count + 1 is the
+## exit. Rooms sit edge-to-edge because each is `room_size.x` wide and
+## its own origin is its center, so this is simply `slot * room_size.x`.
+func _slot_center_x(slot: int) -> float:
+	return slot * room_size.x
 
-	entrance_marker = Node2D.new()
-	entrance_marker.name = "Entrance"
+
+func _create_markers() -> void:
+	entrance_marker = _build_marker("Entrance")
 	add_child(entrance_marker)
 
-	var entrance_label: Label = Label.new()
-	entrance_label.text = "Entrance"
-	entrance_marker.add_child(entrance_label)
-
-	exit_marker = Node2D.new()
-	exit_marker.name = "Exit"
+	exit_marker = _build_marker("Exit")
 	add_child(exit_marker)
 
-	var exit_label: Label = Label.new()
-	exit_label.text = "Exit"
-	exit_marker.add_child(exit_label)
+
+func _build_marker(label_text: String) -> Node2D:
+
+	var marker: Node2D = Node2D.new()
+	marker.name = label_text
+
+	var backdrop: ColorRect = ColorRect.new()
+	backdrop.color = MARKER_COLOR
+	backdrop.position = room_size * -0.5
+	backdrop.size = room_size
+	backdrop.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	marker.add_child(backdrop)
+
+	var label: Label = Label.new()
+	label.text = label_text
+	label.anchor_left = 0.5
+	label.anchor_right = 0.5
+	label.anchor_top = 0.5
+	label.anchor_bottom = 0.5
+	label.offset_left = -60.0
+	label.offset_right = 60.0
+	label.offset_top = -12.0
+	label.offset_bottom = 12.0
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	marker.add_child(label)
+
+	return marker
 
 
 func _rebuild_layout() -> void:
@@ -157,7 +189,7 @@ func _rebuild_layout() -> void:
 
 	var room_count: int = DungeonManager.room_count()
 
-	entrance_marker.position = Vector2.ZERO
+	entrance_marker.position = Vector2(_slot_center_x(0), 0.0)
 	_add_gap_zone(0)
 
 	for i: int in room_count:
@@ -166,7 +198,7 @@ func _rebuild_layout() -> void:
 
 		var room: Room = room_scene.instantiate() as Room
 		add_child(room)
-		room.position = Vector2((i + 1) * spacing, 0.0)
+		room.position = Vector2(_slot_center_x(i + 1), 0.0)
 		room.set_room(room_data)
 		room.room_clicked.connect(_on_room_clicked)
 		room.sell_requested.connect(_on_sell_requested)
@@ -176,15 +208,19 @@ func _rebuild_layout() -> void:
 
 		_add_gap_zone(i + 1)
 
-	exit_marker.position = Vector2((room_count + 1) * spacing, 0.0)
+	exit_marker.position = Vector2(_slot_center_x(room_count + 1), 0.0)
 
 
 func _add_gap_zone(insert_index: int) -> void:
 
 	var zone: RoomGapZone = RoomGapZone.new()
 	zone.gap_index = insert_index
-	zone.size = Vector2(gap_width, room_size.y)
-	zone.position = Vector2((insert_index + 0.5) * spacing - gap_width * 0.5, 0.0)
+	zone.z_index = 1 # always draw above rooms, regardless of sibling order
+
+	var seam_x: float = (_slot_center_x(insert_index) + _slot_center_x(insert_index + 1)) * 0.5
+
+	zone.size = Vector2(gap_zone_width, room_size.y)
+	zone.position = Vector2(seam_x - gap_zone_width * 0.5, room_size.y * -0.5)
 	zone.drop_requested.connect(_on_gap_drop_requested)
 
 	add_child(zone)
