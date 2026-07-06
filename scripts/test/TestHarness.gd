@@ -5,7 +5,12 @@ class_name TestHarness
 ## card onto a room to upgrade it, click a room to sell it, and send a
 ## hero through the dungeon.
 ##
-## GameManager now gates the loop: building actions (insert/upgrade/sell,
+## Content is authored as .tres Resources (see resources/) and wired in
+## below via @export - TestHarness no longer constructs test data in
+## code. Swap these exports in the Inspector to test different content
+## without touching this script.
+##
+## GameManager gates the loop: building actions (insert/upgrade/sell,
 ## enforced in DungeonGrid) only succeed during BUILDING. Pressing
 ## "Send Wave" transitions to COMBAT; Dungeon.wave_cleared transitions
 ## to REWARD, which - with no card draft system yet - immediately loops
@@ -25,55 +30,16 @@ class_name TestHarness
 @onready var send_wave_button: Button = $CanvasLayer/UI/VBox/Buttons/SendWaveButton
 @onready var next_wave_button: Button = $CanvasLayer/UI/VBox/Buttons2/NextWaveButton
 
-var skeleton_monster_data: MonsterData
-var skeleton_room_data: RoomData
-var skeleton_room_upgraded_data: RoomData
-var test_hero_data: HeroData
+## Authored content - assign these in the Inspector (or via the scene
+## file) to point at .tres resources under res://resources/.
+@export var skeleton_room_data: RoomData
+@export var skeleton_room_upgraded_data: RoomData
+@export var test_hero_data: HeroData
 
 
 func _ready() -> void:
-	_build_test_data()
 	_connect_signals()
 	_reset_test()
-
-
-func _build_test_data() -> void:
-
-	skeleton_monster_data = MonsterData.new()
-	skeleton_monster_data.monster_name = "Skeleton"
-	skeleton_monster_data.max_health = 12
-	skeleton_monster_data.damage = 3
-	skeleton_monster_data.armor = 0
-
-	var elite_skeleton_monster: MonsterData = MonsterData.new()
-	elite_skeleton_monster.monster_name = "Elite Skeleton"
-	elite_skeleton_monster.max_health = 24
-	elite_skeleton_monster.damage = 5
-	elite_skeleton_monster.armor = 1
-
-	skeleton_room_upgraded_data = RoomData.new()
-	skeleton_room_upgraded_data.room_name = "Skeleton Den"
-	skeleton_room_upgraded_data.cost = 90
-	skeleton_room_upgraded_data.room_type = "Monster"
-	skeleton_room_upgraded_data.monster = elite_skeleton_monster
-
-	skeleton_room_data = RoomData.new()
-	skeleton_room_data.room_name = "Skeleton Den"
-	skeleton_room_data.cost = 50
-	skeleton_room_data.room_type = "Monster"
-	skeleton_room_data.monster = skeleton_monster_data
-	skeleton_room_data.upgrade_path = skeleton_room_upgraded_data
-
-	test_hero_data = HeroData.new()
-	test_hero_data.hero_name = "Test Adventurer"
-	test_hero_data.max_health = 20
-	test_hero_data.damage = 4
-	test_hero_data.armor = 1
-	test_hero_data.class_type = "Tank"
-	test_hero_data.gold_value = 20
-
-	skeleton_card.set_room_data(skeleton_room_data)
-	skeleton_upgraded_card.set_room_data(skeleton_room_upgraded_data)
 
 
 func _connect_signals() -> void:
@@ -99,6 +65,10 @@ func _reset_test() -> void:
 	EconomyManager.reset()
 	WaveManager.reset()
 	DungeonManager.generate_dungeon()
+
+	skeleton_card.set_room_data(skeleton_room_data)
+	skeleton_upgraded_card.set_room_data(skeleton_room_upgraded_data)
+
 	_on_gold_changed(EconomyManager.gold)
 	wave_label.text = "Wave: %d" % WaveManager.current_wave
 	_log("Test harness reset. Drag a room card into a highlighted gap to build.")
@@ -123,7 +93,7 @@ func _on_fight_pressed() -> void:
 	var monster_entity: CombatEntity = CombatEntity.new()
 	monster_entity.name = "Monster_Sandbox"
 	add_child(monster_entity)
-	monster_entity.configure(skeleton_monster_data.max_health, skeleton_monster_data.damage, skeleton_monster_data.armor)
+	monster_entity.configure(skeleton_room_data.monster.max_health, skeleton_room_data.monster.damage, skeleton_room_data.monster.armor)
 
 	hero_entity.died.connect(_on_combatant_died)
 	monster_entity.died.connect(_on_combatant_died)

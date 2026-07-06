@@ -1,0 +1,10 @@
+[gd_resource type="Resource" script_class="HeroData" format=3 uid="uid://chchsnnehw48r"]
+
+[ext_resource type="Script" uid="uid://cjwm4rv0y2emj" path="res://scripts/heroes/HeroData.gd" id="1_3wuqp"]
+
+[resource]
+script = ExtResource("1_3wuqp")
+hero_name = "Test Adventurer"
+damage = 4
+armor = 1
+metadata/_custom_type_script = "uid://cjwm4rv0y2emj"

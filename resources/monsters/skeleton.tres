@@ -1,0 +1,10 @@
+[gd_resource type="Resource" script_class="MonsterData" format=3 uid="uid://bj8hfxp15sm5h"]
+
+[ext_resource type="Script" uid="uid://bgar6y0x1htfq" path="res://scripts/monsters/MonsterData.gd" id="1_lxkao"]
+
+[resource]
+script = ExtResource("1_lxkao")
+monster_name = "Skeleton"
+max_health = 12
+damage = 3
+metadata/_custom_type_script = "uid://bgar6y0x1htfq"

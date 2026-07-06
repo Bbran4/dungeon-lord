@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="MonsterData" format=3 uid="uid://cqy36bo0g0dv4"]
+
+[ext_resource type="Script" uid="uid://bgar6y0x1htfq" path="res://scripts/monsters/MonsterData.gd" id="1_bivxp"]
+
+[resource]
+script = ExtResource("1_bivxp")
+monster_name = "Elite Skeleton"
+max_health = 24
+damage = 5
+armor = 1
+metadata/_custom_type_script = "uid://bgar6y0x1htfq"

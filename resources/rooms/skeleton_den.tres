@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="RoomData" format=3 uid="uid://dibvn0i5wkrme"]
+
+[ext_resource type="Script" uid="uid://dx42j73ykak67" path="res://scripts/rooms/RoomData.gd" id="1_nw2ml"]
+[ext_resource type="Resource" uid="uid://bj8hfxp15sm5h" path="res://resources/monsters/skeleton.tres" id="1_uhmt8"]
+[ext_resource type="Resource" uid="uid://1j0s1fkvp41p" path="res://resources/rooms/skeleton_den_upgraded.tres" id="3_bnhhl"]
+
+[resource]
+script = ExtResource("1_nw2ml")
+room_name = "Skeleton Den"
+monster = ExtResource("1_uhmt8")
+upgrade_path = ExtResource("3_bnhhl")
+metadata/_custom_type_script = "uid://dx42j73ykak67"
