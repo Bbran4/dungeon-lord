@@ -19,6 +19,7 @@ func set_room(data: RoomData) -> void:
 func update_visuals() -> void:
 
 	if room_data == null:
+		$Label.text = "Empty"
 		return
 
 	$Label.text = room_data.room_name
