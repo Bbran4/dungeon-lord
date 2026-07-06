@@ -1,20 +1,33 @@
-[gd_scene format=3 uid="uid://by2mwo5u866yk"]
+[gd_scene format=3]
 
-[ext_resource type="Script" uid="uid://ducrphgcjy7by" path="res://scripts/core/CombatEntity.gd" id="1_rwunt"]
+[ext_resource type="Script" uid="uid://ducrphgcjy7by" path="res://scripts/core/CombatEntity.gd" id="1"]
 
-[node name="TestMonsterEntity" type="Node2D" unique_id=921975528]
-script = ExtResource("1_rwunt")
+[sub_resource type="CircleShape2D" id="CircleShape2D_monster"]
+radius = 18.0
 
-[node name="Visual" type="ColorRect" parent="." unique_id=2017058695]
+[node name="TestMonsterEntity" type="Node2D" unique_id=921975530]
+script = ExtResource("1")
+
+[node name="Body" type="Node2D" parent="." unique_id=921975531]
+
+[node name="Visual" type="ColorRect" parent="Body" unique_id=2017058696]
 offset_left = -20.0
 offset_top = -20.0
 offset_right = 20.0
 offset_bottom = 20.0
-color = Color(0.8823829, 0.42358288, 0.42358288, 1)
+color = Color(0.75, 0.15, 0.15, 1)
 
-[node name="Label" type="Label" parent="." unique_id=1052130760]
-offset_left = -30.0
+[node name="Label" type="Label" parent="Body" unique_id=1052130765]
+offset_left = -50.0
 offset_top = -45.0
-offset_right = -30.0
-offset_bottom = -45.0
+offset_right = 50.0
+offset_bottom = -25.0
+horizontal_alignment = 1
 text = "Monster"
+
+[node name="SeparationArea" type="Area2D" parent="." unique_id=1052130766]
+collision_layer = 4
+collision_mask = 4
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="SeparationArea" unique_id=1052130767]
+shape = SubResource("CircleShape2D_monster")

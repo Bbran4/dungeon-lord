@@ -223,7 +223,14 @@ func _living_party_entities() -> Array[CombatEntity]:
 
 func _move_party_to(waypoint: Vector2) -> void:
 
-	var tweens: Array[Tween] = []
+	# NOTE: deliberately does NOT await any Tween's `finished` signal.
+	# If a Tween's target node is freed while it's still running (e.g. a
+	# hero or monster dying mid-animation), Godot silently stops the
+	# tween WITHOUT emitting `finished` - so `await tween.finished` can
+	# hang forever with no error. Since each hero's move duration is
+	# already known up front, waiting on a plain timer for the longest
+	# one sidesteps that failure mode entirely.
+	var max_duration: float = 0.0
 
 	for member: Dictionary in _party:
 
@@ -242,11 +249,11 @@ func _move_party_to(waypoint: Vector2) -> void:
 
 		var tween: Tween = create_tween()
 		tween.tween_property(hero, "position", target, duration)
-		tweens.append(tween)
 
-	for tween: Tween in tweens:
-		await tween.finished
+		max_duration = maxf(max_duration, duration)
 
+	if max_duration > 0.0:
+		await get_tree().create_timer(max_duration).timeout
 
 ## Spawns every room's monster group up front, all at once, positioned
 ## at that room's waypoint. Monsters stay put there for the rest of the
@@ -280,14 +287,14 @@ func _spawn_monster_group(room_data: RoomData, at_position: Vector2) -> Array[Co
 
 		var monster: CombatEntity = monster_scene.instantiate() as CombatEntity
 		monster.name = "Monster_%s_%d" % [room_data.monster.monster_name, i + 1]
-
+		
 		add_child(monster)
 		monster.configure(room_data.monster.max_health, room_data.monster.damage, room_data.monster.armor)
 		monster.position = at_position + Vector2(0, (i - (count - 1) / 2.0) * 40.0)
 
-		if monster.has_node("Label"):
-			monster.get_node("Label").text = room_data.monster.monster_name
-
+		if monster.has_node("Body/Label"):
+			monster.get_node("Body/Label").text = room_data.monster.monster_name
+			
 		monsters.append(monster)
 
 	return monsters

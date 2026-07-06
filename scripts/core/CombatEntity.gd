@@ -21,9 +21,36 @@ var damage_taken: int = 0
 ## doesn't let attackers earn more than 100% gold credit against them.
 var healing_received: int = 0
 
+## Visual-only "step toward target and back" distance/duration for the
+## attack lunge. Purely cosmetic - never affects global_position, which
+## stays the entity's real position for movement/formation/collision.
+const ATTACK_LUNGE_DISTANCE: float = 24.0
+const ATTACK_LUNGE_DURATION: float = 0.25
+
+## How close (in px, center-to-center) two combatants are allowed to get
+## before separation starts pushing them apart, and how strongly.
+const SEPARATION_RADIUS: float = 18.0
+const SEPARATION_STRENGTH: float = 250.0
+
+## "Body" (optional) wraps the visual (ColorRect/Label) so the attack
+## lunge can animate it without touching global_position, which stays
+## the entity's real position. "SeparationArea" (optional) is an Area2D
+## used to detect overlapping combatants for the separation push. Both
+## are looked up defensively - a bare CombatEntity.new() with no child
+## scene (e.g. TestHarness's sandbox fight) simply won't lunge or
+## separate, and combat still works fine without them.
+@onready var _body: Node2D = get_node_or_null("Body") as Node2D
+@onready var _separation_area: Area2D = get_node_or_null("SeparationArea") as Area2D
+
+var _attack_tween: Tween
+
 
 func _ready() -> void:
 	current_health = max_health
+
+
+func _process(delta: float) -> void:
+	_apply_separation(delta)
 
 
 ## Sets stats and resets current_health accordingly. Safe to call before
@@ -39,10 +66,14 @@ func configure(new_max_health: int, new_damage: int, new_armor: int) -> void:
 
 ## Returns the mitigated damage actually dealt (0 if target is null),
 ## so callers - namely CombatManager's threat/aggro tracking - can react
-## to how much damage actually landed.
+## to how much damage actually landed. Also triggers the visual lunge
+## toward the target.
 func attack(target: CombatEntity) -> int:
 	if target == null:
 		return 0
+
+	_play_attack_lunge(target.global_position)
+
 	return target.take_damage(damage)
 
 
@@ -85,3 +116,59 @@ func effective_max_health() -> int:
 func die() -> void:
 	died.emit(self)
 	queue_free()
+
+
+## Tweens the visual Body a short distance toward the target and back.
+## No-op if this entity has no Body (e.g. a bare CombatEntity.new()).
+func _play_attack_lunge(target_position: Vector2) -> void:
+
+	if _body == null:
+		return
+
+	if _attack_tween != null and _attack_tween.is_valid():
+		_attack_tween.kill()
+
+	_body.position = Vector2.ZERO
+
+	var direction: Vector2 = target_position - global_position
+	direction = direction.normalized() if direction.length() > 0.001 else Vector2.RIGHT
+
+	var lunge_offset: Vector2 = direction * ATTACK_LUNGE_DISTANCE
+
+	_attack_tween = create_tween()
+	_attack_tween.tween_property(_body, "position", lunge_offset, ATTACK_LUNGE_DURATION * 0.5)
+	_attack_tween.tween_property(_body, "position", Vector2.ZERO, ATTACK_LUNGE_DURATION * 0.5)
+
+
+## Pushes this entity away from any other CombatEntity it's overlapping,
+## scaled by how much they overlap. No-op if this entity has no
+## SeparationArea. Runs continuously (not just during combat), so
+## entities also spread out while walking together as a group.
+func _apply_separation(delta: float) -> void:
+
+	if _separation_area == null:
+		return
+
+	var push: Vector2 = Vector2.ZERO
+
+	for area: Area2D in _separation_area.get_overlapping_areas():
+
+		var other: Node = area.get_parent()
+
+		if other == self or not (other is CombatEntity):
+			continue
+
+		var offset: Vector2 = global_position - other.global_position
+		var distance: float = offset.length()
+
+		if distance < 0.001:
+			offset = Vector2(randf() - 0.5, randf() - 0.5)
+			distance = 0.001
+
+		var overlap: float = SEPARATION_RADIUS * 2.0 - distance
+
+		if overlap > 0.0:
+			push += offset.normalized() * overlap
+
+	if push != Vector2.ZERO:
+		global_position += push * SEPARATION_STRENGTH * delta * 0.01
