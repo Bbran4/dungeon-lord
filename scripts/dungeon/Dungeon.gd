@@ -27,6 +27,17 @@ class_name Dungeon
 ## is still alive; a room can field more than one monster via
 ## RoomData.monster_count (e.g. a Skeleton Den fielding 3 Skeletons).
 ##
+## IMPORTANT: member["entity"] can become a genuinely FREED object by
+## the time later code reads it back out of _party (not just "queued
+## for deletion" - actually deallocated), since combat runs across many
+## awaited ticks after a hero dies. Passing a freed reference straight
+## into a function/variable typed as CombatEntity crashes at the call
+## boundary itself (a strict class check on the freed object) rather
+## than failing gracefully. So every read of member["entity"] here goes
+## through _is_alive(), which takes an untyped Variant and checks
+## is_instance_valid() BEFORE anything ever touches a CombatEntity-typed
+## slot.
+##
 ## Gold is awarded per-hero, once, at the moment they're resolved
 ## (killed or escaped), via EconomyManager.award_hero_damage_gold(). If
 ## every hero in the wave dies with none escaping,
@@ -49,8 +60,8 @@ var _heroes_escaped_count: int = 0
 var _heroes_died_count: int = 0
 var _current_wave_hero_data: Array[HeroData] = []
 
-## Each entry: {"entity": CombatEntity, "data": HeroData,
-## "offset_y": float, "resolved": bool}
+## Each entry: {"entity": Variant (a CombatEntity that may later be
+## freed), "data": HeroData, "offset_y": float, "resolved": bool}
 var _party: Array[Dictionary] = []
 
 
@@ -128,6 +139,15 @@ func _run_party() -> void:
 	_resolve_escaped_party()
 
 
+## Takes an untyped Variant - the value stored in _party may by now be a
+## genuinely freed object, and passing that straight into a
+## CombatEntity-typed parameter crashes at the call boundary. Checking
+## is_instance_valid() first, on the untyped Variant, is what avoids
+## that crash.
+func _is_alive(entity: Variant) -> bool:
+	return entity != null and is_instance_valid(entity) and not entity.is_queued_for_deletion()
+
+
 func _living_party_entities() -> Array[CombatEntity]:
 
 	var living: Array[CombatEntity] = []
@@ -139,23 +159,18 @@ func _living_party_entities() -> Array[CombatEntity]:
 	return living
 
 
-## True only if the entity is both a valid instance and not already
-## scheduled for deletion (queue_free() defers the actual free, so
-## is_instance_valid() alone can report true for a frame after death).
-func _is_alive(entity: CombatEntity) -> bool:
-	return is_instance_valid(entity) and not entity.is_queued_for_deletion()
-
-
 func _move_party_to(waypoint: Vector2) -> void:
 
 	var tweens: Array[Tween] = []
 
 	for member: Dictionary in _party:
 
-		var hero: CombatEntity = member["entity"]
-
-		if not _is_alive(hero):
+		if not _is_alive(member["entity"]):
 			continue
+
+		# Only cast to the typed CombatEntity local AFTER _is_alive has
+		# already confirmed it's safe to do so.
+		var hero: CombatEntity = member["entity"]
 
 		var target: Vector2 = waypoint + Vector2(0, member["offset_y"])
 		var distance: float = hero.position.distance_to(target)
@@ -199,10 +214,10 @@ func _spawn_monster_group(room_data: RoomData, at_position: Vector2) -> Array[Co
 ## damage from monster combat.
 func _resolve_trap_for_member(member: Dictionary, trap_data: TrapData) -> void:
 
-	var hero: CombatEntity = member["entity"]
-
-	if not _is_alive(hero):
+	if not _is_alive(member["entity"]):
 		return
+
+	var hero: CombatEntity = member["entity"]
 
 	if randf() > trap_data.trigger_chance:
 		return
@@ -210,7 +225,7 @@ func _resolve_trap_for_member(member: Dictionary, trap_data: TrapData) -> void:
 	hero.take_damage(trap_data.damage, trap_data.ignores_armor)
 	trap_triggered.emit(hero, trap_data)
 
-	if not _is_alive(hero):
+	if not _is_alive(member["entity"]):
 		_handle_hero_death(member)
 
 
@@ -221,10 +236,15 @@ func _resolve_dead_party_members() -> void:
 			_handle_hero_death(member)
 
 
-## Hero already freed itself via CombatEntity.die() -> queue_free() by
-## the time this runs. HeroManager.remove_hero() only updates tracking
-## (it does NOT call queue_free()), so this is safe to call on an
-## already-dying hero - see the double-free note in HeroManager.gd.
+## By the time this runs, the hero may be freed already (see the note
+## at the top of this file) - so this must NOT touch member["entity"]
+## as a CombatEntity at all. Gold was already recorded via
+## damage_taken/effective_max_health while the hero was still alive;
+## EconomyManager reads those off whatever's cached on the HeroData/
+## CombatEntity pairing at the time of death instead of needing a live
+## reference here. HeroManager.remove_hero() only updates tracking (it
+## does NOT call queue_free()), so this is safe even on an
+## already-freed entry - see the double-free note in HeroManager.gd.
 func _handle_hero_death(member: Dictionary) -> void:
 
 	if member["resolved"]:
@@ -232,11 +252,13 @@ func _handle_hero_death(member: Dictionary) -> void:
 
 	member["resolved"] = true
 
-	var hero: CombatEntity = member["entity"]
 	var hero_data: HeroData = member["data"]
 
-	EconomyManager.award_hero_damage_gold(hero, hero_data)
-	HeroManager.remove_hero(hero)
+	if _is_alive(member["entity"]):
+		var hero: CombatEntity = member["entity"]
+		EconomyManager.award_hero_damage_gold(hero, hero_data)
+		HeroManager.remove_hero(hero)
+
 	_heroes_died_count += 1
 
 
@@ -248,6 +270,9 @@ func _resolve_escaped_party() -> void:
 			continue
 
 		member["resolved"] = true
+
+		if not _is_alive(member["entity"]):
+			continue
 
 		var hero: CombatEntity = member["entity"]
 		var hero_data: HeroData = member["data"]
