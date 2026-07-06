@@ -81,10 +81,11 @@ func _process(delta: float) -> void:
 
 ## Sets stats and resets current_health accordingly. Safe to call before
 ## or after the node enters the tree.
-func configure(new_max_health: int, new_damage: int, new_armor: int, new_abilities: Array[AbilityData] = []) -> void:
+func configure(new_max_health: int, new_damage: int, new_armor: int, new_attack_speed: float = 1.0, new_abilities: Array[AbilityData] = []) -> void:
 	max_health = new_max_health
 	damage = new_damage
 	armor = new_armor
+	attack_speed = new_attack_speed
 	current_health = max_health
 	damage_taken = 0
 	healing_received = 0

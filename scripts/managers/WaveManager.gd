@@ -1,9 +1,25 @@
 extends Node
 
+## Tracks wave "tiers" rather than a raw attempt count. A tier only
+## advances when the Dungeon Lord fully wipes an incoming hero party -
+## no heroes escaping. If any hero escapes, the tier stays the same and
+## the next attempt sends a party of the SAME strength again; the
+## Dungeon Lord must hold the line before heroes get any stronger.
+##
+## Hero stats for a given attempt are scaled by current_stat_multiplier(),
+## which compounds per tier survived - 1.0x at tier 0 (no wipes yet),
+## 1.1x after the first full wipe, 1.21x after the second, and so on.
+## See Dungeon.send_wave() for where this actually gets applied to
+## spawned heroes.
+
 signal wave_started(wave_number: int)
-signal wave_completed(wave_number: int)
+signal wave_completed(wave_number: int, full_wipe: bool)
 
 @export var starting_wave: int = 1
+
+## Stat multiplier increase per tier advanced (0.10 = +10% per tier,
+## compounding).
+@export var stat_buff_per_wave: float = 0.10
 
 var current_wave: int = 0
 
@@ -12,13 +28,28 @@ func reset() -> void:
 	current_wave = starting_wave - 1
 
 
+## Currently unused by TestHarness (wave advancement is driven entirely
+## by combat outcome via complete_wave()) - kept as a manual override
+## hook for future use (e.g. a card effect that skips a tier).
 func start_next_wave() -> void:
-
 	current_wave += 1
-
 	wave_started.emit(current_wave)
 
 
-func complete_wave() -> void:
+## full_wipe: whether the Dungeon Lord fully wiped the incoming party
+## (no heroes escaped). The tier ONLY advances when full_wipe is true -
+## this is what "waves restart until defeated, then spawn stronger"
+## actually means mechanically.
+func complete_wave(full_wipe: bool) -> void:
 
-	wave_completed.emit(current_wave)
+	if full_wipe:
+		current_wave += 1
+
+	wave_completed.emit(current_wave, full_wipe)
+
+
+## Current stat multiplier heroes should be scaled by for the NEXT wave
+## sent. 1.0 until the first full wipe, then compounds
+## +stat_buff_per_wave per tier survived after that.
+func current_stat_multiplier() -> float:
+	return pow(1.0 + stat_buff_per_wave, float(current_wave))

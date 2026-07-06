@@ -16,6 +16,13 @@ class_name TestHarness
 ## to REWARD, which - with no card draft system yet - immediately loops
 ## back to a fresh BUILDING phase.
 ##
+## WAVE SCALING: the wave "tier" (WaveManager.current_wave) only
+## advances when the Dungeon Lord fully wipes the incoming party (see
+## _on_wave_cleared). Escaping heroes send the same-strength party
+## again next time. The Next Wave button no longer drives this - it's
+## kept as an inert placeholder since tier progression is now entirely
+## outcome-driven.
+##
 ## Assumes these are autoload singletons (Project Settings -> Autoload):
 ## GameManager, EconomyManager, DungeonManager, WaveManager, CombatManager
 
@@ -54,10 +61,9 @@ func _ready() -> void:
 
 func _connect_signals() -> void:
 	EconomyManager.gold_changed.connect(_on_gold_changed)
-	CombatManager.ability_used.connect(_on_ability_used)
-	WaveManager.wave_started.connect(_on_wave_started)
 	WaveManager.wave_completed.connect(_on_wave_completed)
 	CombatManager.group_combat_finished.connect(_on_group_combat_finished)
+	CombatManager.ability_used.connect(_on_ability_used)
 	dungeon.hero_escaped.connect(_on_hero_escaped)
 	dungeon.wave_cleared.connect(_on_wave_cleared)
 	dungeon.trap_triggered.connect(_on_trap_triggered)
@@ -88,7 +94,7 @@ func _reset_test() -> void:
 	spike_card.set_room_data(spike_corridor_room_data)
 
 	_on_gold_changed(EconomyManager.gold)
-	wave_label.text = "Wave: %d" % WaveManager.current_wave
+	_update_wave_label(WaveManager.current_wave)
 	_log("Test harness reset. Drag a room card into a highlighted gap to build.")
 	GameManager.start_game()
 
@@ -106,12 +112,12 @@ func _on_fight_pressed() -> void:
 	var hero_entity: CombatEntity = CombatEntity.new()
 	hero_entity.name = "Hero_Sandbox"
 	add_child(hero_entity)
-	hero_entity.configure(test_hero_data.max_health, test_hero_data.damage, test_hero_data.armor, test_hero_data.abilities)
+	hero_entity.configure(test_hero_data.max_health, test_hero_data.damage, test_hero_data.armor, test_hero_data.attack_speed, test_hero_data.abilities)
 
 	var monster_entity: CombatEntity = CombatEntity.new()
 	monster_entity.name = "Monster_Sandbox"
 	add_child(monster_entity)
-	monster_entity.configure(skeleton_room_data.monster.max_health, skeleton_room_data.monster.damage, skeleton_room_data.monster.armor, skeleton_room_data.monster.abilities)
+	monster_entity.configure(skeleton_room_data.monster.max_health, skeleton_room_data.monster.damage, skeleton_room_data.monster.armor, skeleton_room_data.monster.attack_speed, skeleton_room_data.monster.abilities)
 
 	hero_entity.died.connect(_on_combatant_died)
 	monster_entity.died.connect(_on_combatant_died)
@@ -161,25 +167,34 @@ func _on_send_wave_pressed() -> void:
 	for hero_data: HeroData in party:
 		names.append("%s (%s)" % [hero_data.hero_name, hero_data.class_type])
 
-	_log("Sending party: %s" % ", ".join(names))
+	var multiplier: float = WaveManager.current_stat_multiplier()
+	_log("Sending party (x%.2f stats): %s" % [multiplier, ", ".join(names)])
 	dungeon.send_wave(party)
 
 
 func _on_hero_escaped(hero: CombatEntity) -> void:
-	_log("%s reached the exit alive!" % hero.name)
+	_log("%s reached the exit alive! Heroes escaped." % hero.name)
 
 
-func _on_wave_cleared() -> void:
-	_log("Wave cleared (all heroes dealt with).")
+## full_wipe comes straight from Dungeon.wave_cleared - true only if
+## every hero in the wave died with none escaping. This is what decides
+## whether WaveManager advances the difficulty tier.
+func _on_wave_cleared(full_wipe: bool) -> void:
+
+	if full_wipe:
+		_log("Full wipe! The dungeon holds - the next wave will be stronger.")
+	else:
+		_log("Some heroes escaped. The dungeon must hold before growing stronger.")
+
+	WaveManager.complete_wave(full_wipe)
 	GameManager.start_reward_phase()
 
 
 func _on_next_wave_pressed() -> void:
-
-	if GameManager.current_state != GameEnums.GameState.BUILDING:
-		return
-
-	WaveManager.start_next_wave()
+	# Wave tier now advances automatically based on combat outcome (see
+	# _on_wave_cleared) rather than a manual click - full wipe advances
+	# it, an escape does not. Kept as an inert button for now.
+	_log("Wave tier advances automatically based on combat outcome now.")
 
 
 func _on_reset_pressed() -> void:
@@ -201,13 +216,13 @@ func _on_gold_changed(new_gold: int) -> void:
 	gold_label.text = "Gold: %d" % new_gold
 
 
-func _on_wave_started(wave_number: int) -> void:
-	wave_label.text = "Wave: %d" % wave_number
-	_log("Wave %d started." % wave_number)
+func _on_wave_completed(wave_number: int, full_wipe: bool) -> void:
+	_update_wave_label(wave_number)
+	_log("Wave %d completed (%s)." % [wave_number, "full wipe" if full_wipe else "escape"])
 
 
-func _on_wave_completed(wave_number: int) -> void:
-	_log("Wave %d completed." % wave_number)
+func _update_wave_label(wave_number: int) -> void:
+	wave_label.text = "Wave: %d (x%.2f)" % [wave_number, WaveManager.current_stat_multiplier()]
 
 
 func _on_building_phase_started() -> void:
@@ -231,15 +246,16 @@ func _on_combat_phase_started() -> void:
 func _on_reward_phase_started() -> void:
 	phase_label.text = "Phase: Reward"
 	_log("Reward phase. (No card draft yet - looping back to building.)")
-	WaveManager.complete_wave()
 	GameManager.start_building_phase()
 
 
 func _on_trap_triggered(hero: CombatEntity, trap_data: TrapData) -> void:
 	_log("%s triggered %s!" % [hero.name, trap_data.trap_name])
 
+
 func _on_ability_used(message: String) -> void:
 	_log(message)
+
 
 func _log(message: String) -> void:
 	log_text.append_text(message + "\n")

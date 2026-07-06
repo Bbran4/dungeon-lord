@@ -19,6 +19,13 @@ class_name Dungeon
 ## This is purely positional for now - it does not yet affect who
 ## monsters or heroes target (see CombatManager for threat/aggro).
 ##
+## WAVE SCALING: hero stats (max health, damage, armor, attack speed)
+## are scaled by WaveManager.current_stat_multiplier() at spawn time -
+## HeroData resources themselves are never mutated, since they're
+## shared assets. The multiplier only increases when the Dungeon Lord
+## fully wipes a party (see wave_cleared below and WaveManager.gd) -
+## escaping heroes send the same-strength party again next time.
+##
 ## Expects a child node named "DungeonGrid" positioned at local origin,
 ## since waypoint coordinates from DungeonGrid are used directly as
 ## this node's children's local positions.
@@ -49,11 +56,13 @@ class_name Dungeon
 ## Gold is awarded per-hero, once, at the moment they're resolved
 ## (killed or escaped), via EconomyManager.award_hero_damage_gold(). If
 ## every hero in the wave dies with none escaping,
-## EconomyManager.award_wipe_bonus() also fires once the wave finishes.
+## EconomyManager.award_wipe_bonus() also fires once the wave finishes,
+## and wave_cleared reports full_wipe = true so WaveManager can advance
+## the difficulty tier.
 
 signal hero_escaped(hero: CombatEntity)
 signal trap_triggered(hero: CombatEntity, trap_data: TrapData)
-signal wave_cleared
+signal wave_cleared(full_wipe: bool)
 
 @onready var dungeon_grid: DungeonGrid = $DungeonGrid
 
@@ -105,13 +114,20 @@ func send_wave(hero_data_list: Array[HeroData]) -> void:
 
 	_spawn_all_room_monsters()
 
+	var multiplier: float = WaveManager.current_stat_multiplier()
 	var offsets: Array[Vector2] = _compute_formation_offsets(hero_data_list)
 
 	for i: int in hero_data_list.size():
 
 		var hero_data: HeroData = hero_data_list[i]
 		var hero: CombatEntity = HeroManager.spawn_hero(hero_scene, self) as CombatEntity
-		hero.configure(hero_data.max_health, hero_data.damage, hero_data.armor, hero_data.abilities)
+
+		var scaled_max_health: int = int(round(hero_data.max_health * multiplier))
+		var scaled_damage: int = int(round(hero_data.damage * multiplier))
+		var scaled_armor: int = int(round(hero_data.armor * multiplier))
+		var scaled_attack_speed: float = hero_data.attack_speed * multiplier
+
+		hero.configure(scaled_max_health, scaled_damage, scaled_armor, scaled_attack_speed, hero_data.abilities)
 		hero.name = "Hero_%s" % hero_data.hero_name
 
 		var offset: Vector2 = offsets[i]
@@ -259,7 +275,8 @@ func _move_party_to(waypoint: Vector2) -> void:
 ## at that room's waypoint. Monsters stay put there for the rest of the
 ## wave - they never move - until the party reaches them (fought and
 ## freed in _run_party) or the wave ends (cleaned up in
-## _clear_remaining_room_monsters).
+## _clear_remaining_room_monsters). Monster stats are NOT scaled by
+## WaveManager - only heroes get stronger as tiers advance.
 func _spawn_all_room_monsters() -> void:
 
 	_clear_remaining_room_monsters()
@@ -289,12 +306,12 @@ func _spawn_monster_group(room_data: RoomData, at_position: Vector2) -> Array[Co
 		monster.name = "Monster_%s_%d" % [room_data.monster.monster_name, i + 1]
 
 		add_child(monster)
-		monster.configure(room_data.monster.max_health, room_data.monster.damage, room_data.monster.armor, room_data.monster.abilities)
+		monster.configure(room_data.monster.max_health, room_data.monster.damage, room_data.monster.armor, room_data.monster.attack_speed, room_data.monster.abilities)
 		monster.position = at_position + Vector2(0, (i - (count - 1) / 2.0) * 40.0)
 
 		if monster.has_node("Body/Label"):
 			monster.get_node("Body/Label").text = room_data.monster.monster_name
-			
+
 		monsters.append(monster)
 
 	return monsters
@@ -386,10 +403,12 @@ func _finish_wave() -> void:
 
 	_clear_remaining_room_monsters()
 
-	if _heroes_escaped_count == 0 and _heroes_died_count > 0:
+	var full_wipe: bool = _heroes_escaped_count == 0 and _heroes_died_count > 0
+
+	if full_wipe:
 		EconomyManager.award_wipe_bonus(_current_wave_hero_data)
 
-	wave_cleared.emit()
+	wave_cleared.emit(full_wipe)
 
 
 func _clear_remaining_room_monsters() -> void:
