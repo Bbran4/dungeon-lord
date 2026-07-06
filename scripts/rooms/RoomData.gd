@@ -8,7 +8,7 @@ class_name RoomData
 var room_type : String = "Monster"
 
 @export var monster : MonsterData
-@export var trap : Resource
+@export var trap : TrapData
 
 @export var health : int = 100
 

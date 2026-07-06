@@ -7,11 +7,13 @@
 [ext_resource type="Resource" uid="uid://1j0s1fkvp41p" path="res://resources/rooms/skeleton_den_upgraded.tres" id="3_igh42"]
 [ext_resource type="Script" uid="uid://b713taiioqa23" path="res://scripts/core/PanZoomCamera.gd" id="3_senuj"]
 [ext_resource type="Resource" uid="uid://chchsnnehw48r" path="res://resources/heroes/test_adventurer.tres" id="4_2sunf"]
+[ext_resource type="Resource" uid="uid://bol2exvqplv0u" path="res://resources/rooms/spike_corridor.tres" id="4_igh42"]
 
 [node name="TestHarness" type="Node2D" unique_id=1615119598]
 script = ExtResource("1")
 skeleton_room_data = ExtResource("2_enmk8")
 skeleton_room_upgraded_data = ExtResource("3_igh42")
+spike_corridor_room_data = ExtResource("4_igh42")
 test_hero_data = ExtResource("4_2sunf")
 
 [node name="Dungeon" parent="." unique_id=1831605470 instance=ExtResource("2")]
@@ -67,6 +69,13 @@ custom_minimum_size = Vector2(120, 60)
 layout_mode = 2
 text = "Skeleton Den
 90g"
+script = ExtResource("3")
+
+[node name="SpikeCorridorCard" type="Button" parent="CanvasLayer/UI/VBox/Palette" unique_id=203886345]
+custom_minimum_size = Vector2(120, 60)
+layout_mode = 2
+text = "Spike Corridor
+40g"
 script = ExtResource("3")
 
 [node name="Buttons" type="HBoxContainer" parent="CanvasLayer/UI/VBox" unique_id=1412035313]

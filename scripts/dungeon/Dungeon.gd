@@ -11,6 +11,13 @@ class_name Dungeon
 ## remove_hero/active_heroes) rather than kept locally, so other systems
 ## can query or react to the live hero roster later.
 ##
+## A room may carry a trap, a monster, or both. Traps resolve first as a
+## single probabilistic damage instance with no counter-attack and no
+## CombatManager involvement - fundamentally different from a monster
+## fight, which always happens and always trades blows. Monster combat
+## then resolves as before, if the room has one and the hero survived
+## the trap.
+##
 ## Gold is awarded per-hero, once, at the moment they're resolved
 ## (killed or escaped) - based on damage they took over the whole run,
 ## via EconomyManager.award_hero_damage_gold(). If every hero in the
@@ -18,6 +25,7 @@ class_name Dungeon
 ## fires once the wave finishes.
 
 signal hero_escaped(hero: CombatEntity)
+signal trap_triggered(hero: CombatEntity, trap_data: TrapData)
 signal wave_cleared
 
 @onready var dungeon_grid: DungeonGrid = $DungeonGrid
@@ -68,6 +76,14 @@ func _spawn_and_run_hero(hero_data: HeroData) -> void:
 
 		var room_data: RoomData = dungeon_grid.get_room_data_at_path_index(i)
 
+		if room_data != null and room_data.trap != null:
+
+			_resolve_trap(hero, room_data.trap)
+
+			if not _is_alive(hero):
+				_on_hero_died(hero, hero_data)
+				return
+
 		if room_data != null and room_data.monster != null:
 
 			var monster: CombatEntity = _spawn_monster_entity(room_data.monster)
@@ -115,6 +131,21 @@ func _spawn_monster_entity(monster_data: MonsterData) -> CombatEntity:
 	monster.configure(monster_data.max_health, monster_data.damage, monster_data.armor)
 
 	return monster
+
+
+## Single probabilistic damage instance - no counter-attack, no spawned
+## entity, no CombatManager. A miss (roll above trigger_chance) does
+## nothing at all. Damage still flows through CombatEntity.take_damage
+## so it counts toward damage_taken (and therefore gold) exactly like
+## damage from a monster fight.
+func _resolve_trap(hero: CombatEntity, trap_data: TrapData) -> void:
+
+	if randf() > trap_data.trigger_chance:
+		return
+
+	hero.take_damage(trap_data.damage, trap_data.ignores_armor)
+
+	trap_triggered.emit(hero, trap_data)
 
 
 ## Hero already freed itself via CombatEntity.die() -> queue_free() by

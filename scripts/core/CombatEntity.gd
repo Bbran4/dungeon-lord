@@ -42,11 +42,13 @@ func attack(target: CombatEntity) -> void:
 		target.take_damage(damage)
 
 
-func take_damage(amount: int) -> void:
-	amount = max(1, amount - armor)
+func take_damage(amount: int, ignore_armor: bool = false) -> void:
 
-	current_health -= amount
-	damage_taken += amount
+	var mitigated: int = amount if ignore_armor else amount - armor
+	mitigated = max(1, mitigated)
+
+	current_health -= mitigated
+	damage_taken += mitigated
 
 	health_changed.emit(current_health)
 

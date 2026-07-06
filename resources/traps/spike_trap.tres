@@ -1,0 +1,10 @@
+[gd_resource type="Resource" script_class="TrapData" format=3 uid="uid://buxb6ixvq8rc"]
+
+[ext_resource type="Script" uid="uid://ipo3kb65irpf" path="res://scripts/traps/TrapData.gd" id="1_1om6h"]
+
+[resource]
+script = ExtResource("1_1om6h")
+trap_name = "Spike Trap"
+damage = 6
+trigger_chance = 0.75
+metadata/_custom_type_script = "uid://ipo3kb65irpf"

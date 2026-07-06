@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="RoomData" format=3 uid="uid://bol2exvqplv0u"]
+
+[ext_resource type="Script" uid="uid://dx42j73ykak67" path="res://scripts/rooms/RoomData.gd" id="1_fku5a"]
+[ext_resource type="Resource" uid="uid://buxb6ixvq8rc" path="res://resources/traps/spike_trap.tres" id="2_4eppb"]
+
+[resource]
+script = ExtResource("1_fku5a")
+room_name = "Spike Corridor"
+cost = 40
+room_type = "Trap"
+trap = ExtResource("2_4eppb")
+metadata/_custom_type_script = "uid://dx42j73ykak67"

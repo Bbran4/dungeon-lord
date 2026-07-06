@@ -27,6 +27,7 @@ class_name TestHarness
 @onready var log_text: RichTextLabel = $CanvasLayer/UI/VBox/LogText
 @onready var skeleton_card: RoomCard = $CanvasLayer/UI/VBox/Palette/SkeletonCard
 @onready var skeleton_upgraded_card: RoomCard = $CanvasLayer/UI/VBox/Palette/SkeletonUpgradedCard
+@onready var spike_card: RoomCard = $CanvasLayer/UI/VBox/Palette/SpikeCorridorCard
 @onready var send_wave_button: Button = $CanvasLayer/UI/VBox/Buttons/SendWaveButton
 @onready var next_wave_button: Button = $CanvasLayer/UI/VBox/Buttons2/NextWaveButton
 
@@ -34,6 +35,7 @@ class_name TestHarness
 ## file) to point at .tres resources under res://resources/.
 @export var skeleton_room_data: RoomData
 @export var skeleton_room_upgraded_data: RoomData
+@export var spike_corridor_room_data: RoomData
 @export var test_hero_data: HeroData
 
 
@@ -49,7 +51,8 @@ func _connect_signals() -> void:
 	CombatManager.combat_finished.connect(_on_combat_finished)
 	dungeon.hero_escaped.connect(_on_hero_escaped)
 	dungeon.wave_cleared.connect(_on_wave_cleared)
-
+	dungeon.trap_triggered.connect(_on_trap_triggered)
+	
 	GameManager.building_phase_started.connect(_on_building_phase_started)
 	GameManager.combat_phase_started.connect(_on_combat_phase_started)
 	GameManager.reward_phase_started.connect(_on_reward_phase_started)
@@ -58,7 +61,8 @@ func _connect_signals() -> void:
 	skeleton_card.drag_ended.connect(_on_card_drag_ended)
 	skeleton_upgraded_card.drag_started.connect(_on_card_drag_started)
 	skeleton_upgraded_card.drag_ended.connect(_on_card_drag_ended)
-
+	spike_card.drag_started.connect(_on_card_drag_started)
+	spike_card.drag_ended.connect(_on_card_drag_ended)
 
 func _reset_test() -> void:
 	log_text.clear()
@@ -68,7 +72,8 @@ func _reset_test() -> void:
 
 	skeleton_card.set_room_data(skeleton_room_data)
 	skeleton_upgraded_card.set_room_data(skeleton_room_upgraded_data)
-
+	spike_card.set_room_data(spike_corridor_room_data)
+	
 	_on_gold_changed(EconomyManager.gold)
 	wave_label.text = "Wave: %d" % WaveManager.current_wave
 	_log("Test harness reset. Drag a room card into a highlighted gap to build.")
@@ -194,6 +199,8 @@ func _on_reward_phase_started() -> void:
 	WaveManager.complete_wave()
 	GameManager.start_building_phase()
 
+func _on_trap_triggered(hero: CombatEntity, trap_data: TrapData) -> void:
+	_log("%s triggered %s!" % [hero.name, trap_data.trap_name])
 
 func _log(message: String) -> void:
 	log_text.append_text(message + "\n")
