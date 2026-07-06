@@ -86,7 +86,7 @@ func _reset_test() -> void:
 	log_text.clear()
 	EconomyManager.reset()
 	WaveManager.reset()
-	DungeonManager.generate_dungeon([])
+	DungeonManager.generate_dungeon()
 	_on_gold_changed(EconomyManager.gold)
 	wave_label.text = "Wave: %d" % WaveManager.current_wave
 	_log("Test harness reset. Drag a room card into a highlighted gap to build.")
