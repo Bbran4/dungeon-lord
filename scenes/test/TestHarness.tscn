@@ -7,6 +7,7 @@
 [ext_resource type="Resource" uid="uid://1j0s1fkvp41p" path="res://resources/rooms/skeleton_den_upgraded.tres" id="3_igh42"]
 [ext_resource type="Script" uid="uid://b713taiioqa23" path="res://scripts/core/PanZoomCamera.gd" id="3_senuj"]
 [ext_resource type="Resource" uid="uid://chchsnnehw48r" path="res://resources/heroes/test_adventurer.tres" id="4_2sunf"]
+[ext_resource type="Resource" uid="uid://wsqihl823exw" path="res://resources/rooms/skeleton_den_elite.tres" id="4_cun6h"]
 [ext_resource type="Resource" uid="uid://bol2exvqplv0u" path="res://resources/rooms/spike_corridor.tres" id="4_igh42"]
 [ext_resource type="Resource" uid="uid://ditq6i4hyf4kn" path="res://resources/heroes/tank_knight.tres" id="6_iwcrh"]
 [ext_resource type="Resource" uid="uid://pqg84vdw3wfg" path="res://resources/heroes/cleric_healer.tres" id="7_cun6h"]
@@ -18,6 +19,7 @@
 script = ExtResource("1")
 skeleton_room_data = ExtResource("2_enmk8")
 skeleton_room_upgraded_data = ExtResource("3_igh42")
+skeleton_room_elite_data = ExtResource("4_cun6h")
 spike_corridor_room_data = ExtResource("4_igh42")
 test_hero_data = ExtResource("4_2sunf")
 tank_hero_data = ExtResource("6_iwcrh")
@@ -79,6 +81,13 @@ custom_minimum_size = Vector2(120, 60)
 layout_mode = 2
 text = "Skeleton Den
 90g"
+script = ExtResource("3")
+
+[node name="SkeletonEliteCard" type="Button" parent="CanvasLayer/UI/VBox/Palette" unique_id=598806218]
+custom_minimum_size = Vector2(120, 60)
+layout_mode = 2
+text = "Skeleton Den
+150g"
 script = ExtResource("3")
 
 [node name="SpikeCorridorCard" type="Button" parent="CanvasLayer/UI/VBox/Palette" unique_id=203886345]

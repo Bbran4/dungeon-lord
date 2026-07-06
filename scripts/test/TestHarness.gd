@@ -27,6 +27,7 @@ class_name TestHarness
 @onready var log_text: RichTextLabel = $CanvasLayer/UI/VBox/LogText
 @onready var skeleton_card: RoomCard = $CanvasLayer/UI/VBox/Palette/SkeletonCard
 @onready var skeleton_upgraded_card: RoomCard = $CanvasLayer/UI/VBox/Palette/SkeletonUpgradedCard
+@onready var skeleton_elite_card: RoomCard = $CanvasLayer/UI/VBox/Palette/SkeletonEliteCard
 @onready var spike_card: RoomCard = $CanvasLayer/UI/VBox/Palette/SpikeCorridorCard
 @onready var send_wave_button: Button = $CanvasLayer/UI/VBox/Buttons/SendWaveButton
 @onready var next_wave_button: Button = $CanvasLayer/UI/VBox/Buttons2/NextWaveButton
@@ -35,6 +36,7 @@ class_name TestHarness
 ## file) to point at .tres resources under res://resources/.
 @export var skeleton_room_data: RoomData
 @export var skeleton_room_upgraded_data: RoomData
+@export var skeleton_room_elite_data: RoomData
 @export var spike_corridor_room_data: RoomData
 @export var test_hero_data: HeroData
 @export var tank_hero_data: HeroData
@@ -65,6 +67,8 @@ func _connect_signals() -> void:
 	skeleton_card.drag_ended.connect(_on_card_drag_ended)
 	skeleton_upgraded_card.drag_started.connect(_on_card_drag_started)
 	skeleton_upgraded_card.drag_ended.connect(_on_card_drag_ended)
+	skeleton_elite_card.drag_started.connect(_on_card_drag_started)
+	skeleton_elite_card.drag_ended.connect(_on_card_drag_ended)
 	spike_card.drag_started.connect(_on_card_drag_started)
 	spike_card.drag_ended.connect(_on_card_drag_ended)
 
@@ -76,6 +80,7 @@ func _reset_test() -> void:
 
 	skeleton_card.set_room_data(skeleton_room_data)
 	skeleton_upgraded_card.set_room_data(skeleton_room_upgraded_data)
+	skeleton_elite_card.set_room_data(skeleton_room_elite_data)
 	spike_card.set_room_data(spike_corridor_room_data)
 	
 	_on_gold_changed(EconomyManager.gold)
@@ -85,7 +90,7 @@ func _reset_test() -> void:
 
 
 func _on_card_drag_started(room_data: RoomData) -> void:
-	dungeon_grid.show_upgrade_prompts_for(room_data.room_name)
+	dungeon_grid.show_upgrade_prompts_for(room_data)
 
 
 func _on_card_drag_ended() -> void:

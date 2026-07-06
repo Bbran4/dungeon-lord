@@ -45,9 +45,8 @@ func update_visuals() -> void:
 		monster_label.visible = false
 
 
-func show_upgrade_prompt(room_index: int, room_name: String) -> void:
+func show_upgrade_prompt(room_index: int) -> void:
 	upgrade_zone.room_index = room_index
-	upgrade_zone.expected_room_name = room_name
 	upgrade_zone.visible = true
 
 

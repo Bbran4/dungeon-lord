@@ -132,14 +132,14 @@ func get_room_data_at_path_index(path_index: int) -> RoomData:
 
 
 ## Called by a palette/build UI when a matching room card starts dragging.
-func show_upgrade_prompts_for(room_name: String) -> void:
+func show_upgrade_prompts_for(dragged_room_data: RoomData) -> void:
 
 	for i: int in room_nodes.size():
 
-		var room_data: RoomData = DungeonManager.get_room(i)
+		var current: RoomData = DungeonManager.get_room(i)
 
-		if room_data != null and room_data.room_name == room_name and room_data.upgrade_path != null:
-			room_nodes[i].show_upgrade_prompt(i, room_name)
+		if current != null and current.upgrade_path == dragged_room_data:
+			room_nodes[i].show_upgrade_prompt(i)
 
 
 func hide_upgrade_prompts() -> void:

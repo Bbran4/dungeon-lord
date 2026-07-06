@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="RoomData" format=3 uid="uid://wsqihl823exw"]
+
+[ext_resource type="Script" uid="uid://dx42j73ykak67" path="res://scripts/rooms/RoomData.gd" id="1_4vuo8"]
+[ext_resource type="Resource" uid="uid://51kl4gx8m4lu" path="res://resources/monsters/skeleton_champion.tres" id="1_o8nkj"]
+
+[resource]
+script = ExtResource("1_4vuo8")
+room_name = "Skeleton Den"
+cost = 150
+monster = ExtResource("1_o8nkj")
+rarity = "Rare"
+metadata/_custom_type_script = "uid://dx42j73ykak67"

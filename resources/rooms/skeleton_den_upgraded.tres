@@ -2,10 +2,12 @@
 
 [ext_resource type="Resource" uid="uid://cqy36bo0g0dv4" path="res://resources/monsters/elite_skeleton.tres" id="1_hi23s"]
 [ext_resource type="Script" uid="uid://dx42j73ykak67" path="res://scripts/rooms/RoomData.gd" id="1_orieg"]
+[ext_resource type="Resource" uid="uid://wsqihl823exw" path="res://resources/rooms/skeleton_den_elite.tres" id="3_ah3ak"]
 
 [resource]
 script = ExtResource("1_orieg")
 room_name = "Skeleton Den"
 cost = 90
 monster = ExtResource("1_hi23s")
+upgrade_path = ExtResource("3_ah3ak")
 metadata/_custom_type_script = "uid://dx42j73ykak67"
