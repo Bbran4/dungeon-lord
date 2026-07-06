@@ -37,6 +37,12 @@ const ATTACK_LUNGE_DURATION: float = 0.25
 const SEPARATION_RADIUS: float = 18.0
 const SEPARATION_STRENGTH: float = 250.0
 
+## Colors for the Taunt (persistent while active) and Heal (brief flash)
+## visual feedback. Both no-op if this entity has no Body/Visual node.
+const TAUNT_COLOR: Color = Color(0.55, 0.0, 0.0, 1.0)
+const HEAL_FLASH_COLOR: Color = Color(0.2, 1.0, 0.3, 1.0)
+const HEAL_FLASH_DURATION: float = 0.5
+
 ## "Body" (optional) wraps the visual (ColorRect/Label) so the attack
 ## lunge can animate it without touching global_position, which stays
 ## the entity's real position. "SeparationArea" (optional) is an Area2D
@@ -46,8 +52,13 @@ const SEPARATION_STRENGTH: float = 250.0
 ## separate, and combat still works fine without them.
 @onready var _body: Node2D = get_node_or_null("Body") as Node2D
 @onready var _separation_area: Area2D = get_node_or_null("SeparationArea") as Area2D
+@onready var _visual: ColorRect = get_node_or_null("Body/Visual") as ColorRect
 
 var _attack_tween: Tween
+var _heal_flash_tween: Tween
+
+var _original_visual_color: Color = Color.WHITE
+var _is_taunting: bool = false
 
 ## Auto-generated from damage/attack_speed - always available, always
 ## rebuilt whenever those stats change via configure(). Authored
@@ -59,6 +70,9 @@ var _basic_attack_ability: AbilityData
 func _ready() -> void:
 	current_health = max_health
 	_rebuild_basic_attack_ability()
+
+	if _visual != null:
+		_original_visual_color = _visual.color
 
 
 func _process(delta: float) -> void:
@@ -124,7 +138,8 @@ func take_damage(amount: int, ignore_armor: bool = false) -> int:
 	return mitigated
 
 
-## Restores health (capped at max_health) and records the amount healed.
+## Restores health (capped at max_health), records the amount healed,
+## and flashes the visual green briefly.
 func heal(amount: int) -> void:
 	if amount <= 0:
 		return
@@ -134,11 +149,32 @@ func heal(amount: int) -> void:
 
 	health_changed.emit(current_health)
 
+	_play_heal_flash()
+
 
 ## Base max health plus all healing received - the total health pool an
 ## attacker actually had to overcome to defeat this entity.
 func effective_max_health() -> int:
 	return max_health + healing_received
+
+
+## Persistent (not a flash) color change while Taunt is active. Called
+## by CombatManager the instant Taunt fires and again the instant it
+## expires, so this only ever needs to reflect "on" or "off" - no
+## duration tracking here, CombatManager owns that.
+func set_taunting(active: bool) -> void:
+
+	if _visual == null:
+		return
+
+	_is_taunting = active
+
+	# Don't stomp an in-progress heal flash - it already tweens back to
+	# the correct base color (taunt red or original) once it finishes.
+	if _heal_flash_tween != null and _heal_flash_tween.is_valid():
+		return
+
+	_visual.color = TAUNT_COLOR if active else _original_visual_color
 
 
 func die() -> void:
@@ -175,6 +211,26 @@ func _play_attack_lunge(target_position: Vector2) -> void:
 	_attack_tween = create_tween()
 	_attack_tween.tween_property(_body, "position", lunge_offset, ATTACK_LUNGE_DURATION * 0.5)
 	_attack_tween.tween_property(_body, "position", Vector2.ZERO, ATTACK_LUNGE_DURATION * 0.5)
+
+
+## Briefly flashes Visual green, then tweens back to whichever base
+## color is currently correct (taunt red if this entity is mid-taunt,
+## otherwise its original color) - so healing a taunting Tank fades
+## back to red, not back to blue.
+func _play_heal_flash() -> void:
+
+	if _visual == null:
+		return
+
+	if _heal_flash_tween != null and _heal_flash_tween.is_valid():
+		_heal_flash_tween.kill()
+
+	var base_color: Color = TAUNT_COLOR if _is_taunting else _original_visual_color
+
+	_visual.color = HEAL_FLASH_COLOR
+
+	_heal_flash_tween = create_tween()
+	_heal_flash_tween.tween_property(_visual, "color", base_color, HEAL_FLASH_DURATION)
 
 
 ## Pushes this entity away from any other CombatEntity it's overlapping,

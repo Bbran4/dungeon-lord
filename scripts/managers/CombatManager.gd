@@ -64,6 +64,7 @@ func begin_group_combat(heroes: Array[CombatEntity], monsters: Array[CombatEntit
 		elapsed_time += TICK_INTERVAL
 
 		_expire_buffs(active_buffs, elapsed_time)
+		_expire_taunts(active_taunts, elapsed_time)
 
 		for hero: CombatEntity in heroes:
 			if is_instance_valid(hero):
@@ -74,6 +75,7 @@ func begin_group_combat(heroes: Array[CombatEntity], monsters: Array[CombatEntit
 				_tick_actor(monster, monsters, heroes, cooldowns, threat_table, active_taunts, active_buffs, elapsed_time, true)
 
 	_revert_all_buffs(active_buffs)
+	_revert_all_taunts(active_taunts)
 
 	group_combat_finished.emit(_has_living(heroes))
 
@@ -203,6 +205,7 @@ func _execute_ability(
 		"Taunt":
 
 			active_taunts[actor] = elapsed_time + ability.duration
+			actor.set_taunting(true)
 
 
 ## Attack-type target selection: random living monster for heroes;
@@ -306,6 +309,18 @@ func _expire_buffs(active_buffs: Array, elapsed_time: float) -> void:
 	active_buffs.clear()
 	active_buffs.append_array(remaining)
 
+func _expire_taunts(active_taunts: Dictionary, elapsed_time: float) -> void:
+
+	var expired: Array = []
+
+	for hero: CombatEntity in active_taunts.keys():
+		if elapsed_time >= active_taunts[hero]:
+			expired.append(hero)
+
+	for hero: CombatEntity in expired:
+		active_taunts.erase(hero)
+		if is_instance_valid(hero):
+			hero.set_taunting(false)
 
 func _revert_all_buffs(active_buffs: Array) -> void:
 
@@ -314,3 +329,11 @@ func _revert_all_buffs(active_buffs: Array) -> void:
 			buff["entity"].armor -= buff["amount"]
 
 	active_buffs.clear()
+
+func _revert_all_taunts(active_taunts: Dictionary) -> void:
+
+	for hero: CombatEntity in active_taunts.keys():
+		if is_instance_valid(hero):
+			hero.set_taunting(false)
+
+	active_taunts.clear()
