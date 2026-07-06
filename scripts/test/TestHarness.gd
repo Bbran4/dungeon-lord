@@ -3,7 +3,7 @@ class_name TestHarness
 
 ## Exercises the full loop: drag a card to build a room, drag a matching
 ## card onto a room to upgrade it, click a room to sell it, and send a
-## hero through the dungeon.
+## multi-hero party through the dungeon.
 ##
 ## Content is authored as .tres Resources (see resources/) and wired in
 ## below via @export - TestHarness no longer constructs test data in
@@ -39,11 +39,13 @@ class_name TestHarness
 @export var skeleton_room_elite_data: RoomData
 @export var spike_corridor_room_data: RoomData
 @export var test_hero_data: HeroData
+
 @export var tank_hero_data: HeroData
 @export var healer_hero_data: HeroData
 @export var ranger_hero_data: HeroData
 @export var mage_hero_data: HeroData
 @export var rogue_hero_data: HeroData
+
 
 func _ready() -> void:
 	_connect_signals()
@@ -54,11 +56,11 @@ func _connect_signals() -> void:
 	EconomyManager.gold_changed.connect(_on_gold_changed)
 	WaveManager.wave_started.connect(_on_wave_started)
 	WaveManager.wave_completed.connect(_on_wave_completed)
-	CombatManager.combat_finished.connect(_on_combat_finished)
+	CombatManager.group_combat_finished.connect(_on_group_combat_finished)
 	dungeon.hero_escaped.connect(_on_hero_escaped)
 	dungeon.wave_cleared.connect(_on_wave_cleared)
 	dungeon.trap_triggered.connect(_on_trap_triggered)
-	
+
 	GameManager.building_phase_started.connect(_on_building_phase_started)
 	GameManager.combat_phase_started.connect(_on_combat_phase_started)
 	GameManager.reward_phase_started.connect(_on_reward_phase_started)
@@ -72,6 +74,7 @@ func _connect_signals() -> void:
 	spike_card.drag_started.connect(_on_card_drag_started)
 	spike_card.drag_ended.connect(_on_card_drag_ended)
 
+
 func _reset_test() -> void:
 	log_text.clear()
 	EconomyManager.reset()
@@ -82,7 +85,7 @@ func _reset_test() -> void:
 	skeleton_upgraded_card.set_room_data(skeleton_room_upgraded_data)
 	skeleton_elite_card.set_room_data(skeleton_room_elite_data)
 	spike_card.set_room_data(spike_corridor_room_data)
-	
+
 	_on_gold_changed(EconomyManager.gold)
 	wave_label.text = "Wave: %d" % WaveManager.current_wave
 	_log("Test harness reset. Drag a room card into a highlighted gap to build.")
@@ -114,7 +117,7 @@ func _on_fight_pressed() -> void:
 
 	_log("Sandbox combat: %s vs %s" % [hero_entity.name, monster_entity.name])
 
-	CombatManager.begin_combat(hero_entity, monster_entity)
+	await CombatManager.begin_group_combat([hero_entity], [monster_entity])
 
 	EconomyManager.award_hero_damage_gold(hero_entity, test_hero_data)
 
@@ -123,18 +126,11 @@ func _on_fight_pressed() -> void:
 	if is_instance_valid(monster_entity):
 		monster_entity.queue_free()
 
+
 ## Builds a randomized test party: a guaranteed Tank, Healer, and one DPS
 ## (Mage or Ranger, chosen at random), plus a 4th member of a random
 ## class drawn from the full roster. Exists to exercise
-## Dungeon.send_wave() with more than one hero.
-##
-## IMPORTANT: each hero still moves through the dungeon and fights
-## independently once spawned - there is no in-party coordination yet.
-## The Healer's "heal" entry in `abilities` is data only; nothing calls
-## CombatEntity.heal() on anyone else's behalf. A Tank doesn't "tank" for
-## the party either - every hero fights every room's monster on their
-## own. Real party behavior (a Healer keeping a Tank alive, a Tank being
-## targeted first, etc.) needs Milestone 4 (Hero Parties / Party AI).
+## Dungeon.send_wave() with a real multi-hero group.
 func _build_test_party() -> Array[HeroData]:
 
 	var dps_pool: Array[HeroData] = [ranger_hero_data, mage_hero_data]
@@ -148,7 +144,6 @@ func _build_test_party() -> Array[HeroData]:
 	party.append(full_roster[randi() % full_roster.size()])
 
 	return party
-
 
 
 func _on_send_wave_pressed() -> void:
@@ -170,7 +165,7 @@ func _on_send_wave_pressed() -> void:
 
 
 func _on_hero_escaped(hero: CombatEntity) -> void:
-	_log("%s reached the exit alive! Heroes escaped." % hero.name)
+	_log("%s reached the exit alive!" % hero.name)
 
 
 func _on_wave_cleared() -> void:
@@ -194,13 +189,11 @@ func _on_combatant_died(entity: CombatEntity) -> void:
 	_log("%s died." % entity.name)
 
 
-func _on_combat_finished(winner: CombatEntity, loser: CombatEntity) -> void:
-
-	if not is_instance_valid(winner):
-		return
-
-	var loser_name: String = loser.name if is_instance_valid(loser) else "???"
-	_log("%s defeated %s." % [winner.name, loser_name])
+func _on_group_combat_finished(heroes_won: bool) -> void:
+	if heroes_won:
+		_log("The party defeated the room's monsters.")
+	else:
+		_log("The party was wiped out by the room's monsters.")
 
 
 func _on_gold_changed(new_gold: int) -> void:
@@ -220,20 +213,18 @@ func _on_building_phase_started() -> void:
 	phase_label.text = "Phase: Building"
 	send_wave_button.disabled = false
 	next_wave_button.disabled = false
-	skeleton_card.disabled = false
-	skeleton_upgraded_card.disabled = false
-	skeleton_card.mouse_filter = Control.MOUSE_FILTER_STOP
-	skeleton_upgraded_card.mouse_filter = Control.MOUSE_FILTER_STOP
+	for card: RoomCard in [skeleton_card, skeleton_upgraded_card, skeleton_elite_card, spike_card]:
+		card.disabled = false
+		card.mouse_filter = Control.MOUSE_FILTER_STOP
 
 
 func _on_combat_phase_started() -> void:
 	phase_label.text = "Phase: Combat"
 	send_wave_button.disabled = true
 	next_wave_button.disabled = true
-	skeleton_card.disabled = true
-	skeleton_upgraded_card.disabled = true
-	skeleton_card.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	skeleton_upgraded_card.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for card: RoomCard in [skeleton_card, skeleton_upgraded_card, skeleton_elite_card, spike_card]:
+		card.disabled = true
+		card.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 
 func _on_reward_phase_started() -> void:
@@ -242,8 +233,10 @@ func _on_reward_phase_started() -> void:
 	WaveManager.complete_wave()
 	GameManager.start_building_phase()
 
+
 func _on_trap_triggered(hero: CombatEntity, trap_data: TrapData) -> void:
 	_log("%s triggered %s!" % [hero.name, trap_data.trap_name])
+
 
 func _log(message: String) -> void:
 	log_text.append_text(message + "\n")

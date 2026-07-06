@@ -8,5 +8,6 @@
 script = ExtResource("1_nw2ml")
 room_name = "Skeleton Den"
 monster = ExtResource("1_uhmt8")
+monster_count = 3
 upgrade_path = ExtResource("3_bnhhl")
 metadata/_custom_type_script = "uid://dx42j73ykak67"

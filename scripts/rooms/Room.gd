@@ -38,7 +38,12 @@ func update_visuals() -> void:
 	$Label.text = room_data.room_name
 
 	if room_data.monster != null:
-		monster_label.text = room_data.monster.monster_name
+
+		if room_data.monster_count > 1:
+			monster_label.text = "%s x%d" % [room_data.monster.monster_name, room_data.monster_count]
+		else:
+			monster_label.text = room_data.monster.monster_name
+
 		monster_label.visible = true
 	else:
 		monster_label.text = ""

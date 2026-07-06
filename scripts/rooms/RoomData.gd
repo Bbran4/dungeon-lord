@@ -8,6 +8,12 @@ class_name RoomData
 var room_type : String = "Monster"
 
 @export var monster : MonsterData
+
+## How many of `monster` this room fields as a group encounter (e.g. a
+## Skeleton Den fielding 3 Skeletons). 1 = a single monster, same as
+## before this field existed.
+@export var monster_count : int = 1
+
 @export var trap : TrapData
 
 @export var health : int = 100

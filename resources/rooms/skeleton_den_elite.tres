@@ -8,5 +8,6 @@ script = ExtResource("1_4vuo8")
 room_name = "Skeleton Den"
 cost = 150
 monster = ExtResource("1_o8nkj")
+monster_count = 3
 rarity = "Rare"
 metadata/_custom_type_script = "uid://dx42j73ykak67"
