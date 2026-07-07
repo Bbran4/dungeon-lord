@@ -67,23 +67,6 @@ text = "Wave: 0"
 layout_mode = 2
 text = "Phase: Building"
 
-[node name="Palette" type="HBoxContainer" parent="CanvasLayer/UI/VBox" unique_id=1633108841]
-layout_mode = 2
-mouse_filter = 2
-
-[node name="SkeletonUpgradedCard" parent="CanvasLayer/UI/VBox/Palette" unique_id=1317822416 instance=ExtResource("18_8sut0")]
-layout_mode = 2
-
-[node name="SkeletonEliteCard" parent="CanvasLayer/UI/VBox/Palette" unique_id=1517738574 instance=ExtResource("18_8sut0")]
-layout_mode = 2
-
-[node name="Hand" type="Control" parent="CanvasLayer/UI/VBox" unique_id=1282283276]
-custom_minimum_size = Vector2(0, 300)
-layout_mode = 2
-size_flags_vertical = 8
-script = ExtResource("17_l2txw")
-card_view_scene = ExtResource("18_8sut0")
-
 [node name="Buttons" type="HBoxContainer" parent="CanvasLayer/UI/VBox" unique_id=1412035313]
 layout_mode = 2
 mouse_filter = 2
@@ -107,6 +90,23 @@ text = "Next Wave"
 [node name="ResetButton" type="Button" parent="CanvasLayer/UI/VBox/Buttons2" unique_id=320872233]
 layout_mode = 2
 text = "Reset Test"
+
+[node name="Palette" type="HBoxContainer" parent="CanvasLayer/UI/VBox" unique_id=1633108841]
+layout_mode = 2
+mouse_filter = 2
+
+[node name="SkeletonUpgradedCard" parent="CanvasLayer/UI/VBox/Palette" unique_id=1317822416 instance=ExtResource("18_8sut0")]
+layout_mode = 2
+
+[node name="SkeletonEliteCard" parent="CanvasLayer/UI/VBox/Palette" unique_id=1517738574 instance=ExtResource("18_8sut0")]
+layout_mode = 2
+
+[node name="Hand" type="Control" parent="CanvasLayer/UI/VBox" unique_id=1282283276]
+custom_minimum_size = Vector2(0, 300)
+layout_mode = 2
+size_flags_vertical = 8
+script = ExtResource("17_l2txw")
+card_view_scene = ExtResource("18_8sut0")
 
 [node name="LogText" type="RichTextLabel" parent="CanvasLayer/UI/VBox" unique_id=376109124]
 custom_minimum_size = Vector2(400, 260)
