@@ -51,7 +51,7 @@ class_name TestHarness
 @onready var skeleton_elite_card: RoomCard = $CanvasLayer/UI/VBox/Palette/SkeletonEliteCard
 @onready var send_wave_button: Button = $CanvasLayer/UI/VBox/Buttons/SendWaveButton
 @onready var next_wave_button: Button = $CanvasLayer/UI/VBox/Buttons2/NextWaveButton
-@onready var hand_container: HBoxContainer = $CanvasLayer/UI/VBox/Hand
+@onready var hand_ui: CardHandUI = $CanvasLayer/UI/VBox/Hand
 @onready var shop_panel: Panel = $CanvasLayer/UI/ShopPanel
 @onready var shop_room_buttons: Array[Button] = [
 	$CanvasLayer/UI/ShopPanel/VBox/RoomButtons/RoomButton0,
@@ -84,12 +84,6 @@ class_name TestHarness
 ## 3 in the Inspector (e.g. Skeleton Den, Spike Corridor, Sanctuary).
 @export var starting_hand_cards: Array[RoomData] = []
 
-const ROOM_CARD_SCRIPT: Script = preload("res://scripts/rooms/RoomCard.gd")
-
-## Dynamically-created RoomCard views mirroring CardHandManager.hand,
-## rebuilt in full every time the hand changes - see _rebuild_hand_ui.
-var _hand_card_views: Array[RoomCard] = []
-
 
 func _ready() -> void:
 	_connect_signals()
@@ -116,7 +110,8 @@ func _connect_signals() -> void:
 	skeleton_elite_card.drag_started.connect(_on_card_drag_started)
 	skeleton_elite_card.drag_ended.connect(_on_card_drag_ended)
 
-	CardHandManager.hand_changed.connect(_on_hand_changed)
+	hand_ui.card_drag_started.connect(_on_card_drag_started)
+	hand_ui.card_drag_ended.connect(_on_card_drag_ended)
 
 	ShopManager.shop_opened.connect(_on_shop_opened)
 	ShopManager.shop_closed.connect(_on_shop_closed)
@@ -269,10 +264,13 @@ func _on_victory_started() -> void:
 	phase_label.text = "Phase: VICTORY"
 	send_wave_button.disabled = true
 	next_wave_button.disabled = true
-	for card: RoomCard in _all_room_cards():
-		card.disabled = true
-		card.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hand_ui.set_enabled(false)
+	skeleton_upgraded_card.disabled = true
+	skeleton_upgraded_card.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	skeleton_elite_card.disabled = true
+	skeleton_elite_card.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_log("🏆 VICTORY! The dungeon held through wave %d!" % WaveManager.max_wave)
+
 
 
 func _on_next_wave_pressed() -> void:
@@ -314,18 +312,22 @@ func _on_building_phase_started() -> void:
 	phase_label.text = "Phase: Building"
 	send_wave_button.disabled = false
 	next_wave_button.disabled = false
-	for card: RoomCard in _all_room_cards():
-		card.disabled = false
-		card.mouse_filter = Control.MOUSE_FILTER_STOP
+	hand_ui.set_enabled(true)
+	skeleton_upgraded_card.disabled = false
+	skeleton_upgraded_card.mouse_filter = Control.MOUSE_FILTER_STOP
+	skeleton_elite_card.disabled = false
+	skeleton_elite_card.mouse_filter = Control.MOUSE_FILTER_STOP
 
 
 func _on_combat_phase_started() -> void:
 	phase_label.text = "Phase: Combat"
 	send_wave_button.disabled = true
 	next_wave_button.disabled = true
-	for card: RoomCard in _all_room_cards():
-		card.disabled = true
-		card.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hand_ui.set_enabled(false)
+	skeleton_upgraded_card.disabled = true
+	skeleton_upgraded_card.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	skeleton_elite_card.disabled = true
+	skeleton_elite_card.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 
 func _on_reward_phase_started() -> void:
@@ -436,46 +438,6 @@ func _on_passive_purchased(passive_data: PassiveData) -> void:
 func _on_pack_opened(description: String) -> void:
 	_log(description)
 	_refresh_shop_ui()
-
-
-## Rebuilds every hand card view from scratch whenever
-## CardHandManager.hand changes (add or remove). Simpler and safer than
-## trying to diff the hand incrementally, and the hand is small enough
-## (single digits) that this is cheap.
-func _on_hand_changed() -> void:
-	_rebuild_hand_ui()
-
-
-func _rebuild_hand_ui() -> void:
-
-	for card: RoomCard in _hand_card_views:
-		if is_instance_valid(card):
-			card.queue_free()
-	_hand_card_views.clear()
-
-	var in_building: bool = GameManager.current_state == GameEnums.GameState.BUILDING
-
-	for room_data: RoomData in CardHandManager.hand:
-
-		var card: Button = Button.new()
-		card.set_script(ROOM_CARD_SCRIPT)
-		card.custom_minimum_size = Vector2(120, 60)
-		hand_container.add_child(card)
-		card.set_room_data(room_data)
-
-		card.disabled = not in_building
-		card.mouse_filter = Control.MOUSE_FILTER_STOP if in_building else Control.MOUSE_FILTER_IGNORE
-
-		card.drag_started.connect(_on_card_drag_started)
-		card.drag_ended.connect(_on_card_drag_ended)
-
-		_hand_card_views.append(card)
-
-
-func _all_room_cards() -> Array[RoomCard]:
-	var cards: Array[RoomCard] = [skeleton_upgraded_card, skeleton_elite_card]
-	cards.append_array(_hand_card_views)
-	return cards
 
 
 func _log(message: String) -> void:

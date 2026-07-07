@@ -63,3 +63,10 @@ enum PassiveEffectType {
 	MONSTER_HEALTH_MULTIPLIER,
 	REROLL_DISCOUNT
 }
+
+enum Rarity {
+	COMMON,
+	RARE,
+	EPIC,
+	LEGENDARY
+}

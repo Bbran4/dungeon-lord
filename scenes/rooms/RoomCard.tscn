@@ -1,0 +1,50 @@
+[gd_scene format=3 uid="uid://dpg6a482y72ge"]
+
+[ext_resource type="Script" uid="uid://3g675dniieyx" path="res://scripts/rooms/RoomCard.gd" id="1_asco8"]
+
+[node name="CardView" type="Button" unique_id=1131208387]
+custom_minimum_size = Vector2(160, 240)
+size_flags_vertical = 3
+script = ExtResource("1_asco8")
+
+[node name="MarginContainer" type="MarginContainer" parent="." unique_id=1653741388]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="VBoxContainer" type="VBoxContainer" parent="MarginContainer" unique_id=873422289]
+layout_mode = 2
+size_flags_horizontal = 4
+size_flags_vertical = 4
+alignment = 1
+
+[node name="Header" type="HBoxContainer" parent="MarginContainer/VBoxContainer" unique_id=1655688371]
+layout_mode = 2
+
+[node name="NameLabel" type="Label" parent="MarginContainer/VBoxContainer/Header" unique_id=836638414]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Strike"
+
+[node name="DiceRequirementLabel" type="Label" parent="MarginContainer/VBoxContainer/Header" unique_id=2084180073]
+layout_mode = 2
+text = "🎲"
+horizontal_alignment = 1
+
+[node name="ArtTexture" type="TextureRect" parent="MarginContainer/VBoxContainer" unique_id=860437977]
+custom_minimum_size = Vector2(140, 90)
+layout_mode = 2
+size_flags_horizontal = 4
+size_flags_vertical = 4
+expand_mode = 3
+stretch_mode = 5
+
+[node name="DescriptionLabel" type="Label" parent="MarginContainer/VBoxContainer" unique_id=448653064]
+custom_minimum_size = Vector2(130, 55)
+layout_mode = 2
+size_flags_vertical = 3
+autowrap_mode = 3
+clip_text = true

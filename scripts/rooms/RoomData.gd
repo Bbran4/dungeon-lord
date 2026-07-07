@@ -7,6 +7,12 @@ class_name RoomData
 @export_enum("Empty", "Monster", "Trap", "Boss", "Utility")
 var room_type : String = "Monster"
 
+## Card-facing flavor/summary text. Optional - RoomCard falls back to a
+## short auto-generated blurb (see RoomCard._get_description) if this
+## is left blank, so existing .tres files aren't broken by this field
+## being new.
+@export_multiline var description : String = ""
+
 @export var monster : MonsterData
 
 ## How many of `monster` this room fields as a group encounter (e.g. a
@@ -22,9 +28,7 @@ var room_type : String = "Monster"
 
 @export var icon : Texture2D
 
-@export_enum("Common", "Rare", "Epic", "Legendary")
-var rarity : String = "Common"
-
+@export var rarity: GameEnums.Rarity = GameEnums.Rarity.COMMON
 ## Utility rooms only - applied once when the party arrives here (see
 ## Dungeon._apply_utility_room). Defaults are no-ops, so these are
 ## harmless on any non-Utility room.

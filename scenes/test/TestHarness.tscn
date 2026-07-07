@@ -3,7 +3,6 @@
 [ext_resource type="Script" uid="uid://frro8y1t7glr" path="res://scripts/test/TestHarness.gd" id="1"]
 [ext_resource type="PackedScene" uid="uid://ceru4x7efje2x" path="res://scenes/dungeons/Dungeon.tscn" id="2"]
 [ext_resource type="Resource" uid="uid://dibvn0i5wkrme" path="res://resources/rooms/skeleton_den.tres" id="2_enmk8"]
-[ext_resource type="Script" uid="uid://3g675dniieyx" path="res://scripts/rooms/RoomCard.gd" id="3"]
 [ext_resource type="Resource" uid="uid://1j0s1fkvp41p" path="res://resources/rooms/skeleton_den_upgraded.tres" id="3_igh42"]
 [ext_resource type="Script" uid="uid://b713taiioqa23" path="res://scripts/core/PanZoomCamera.gd" id="3_senuj"]
 [ext_resource type="Resource" uid="uid://chchsnnehw48r" path="res://resources/heroes/test_adventurer.tres" id="4_2sunf"]
@@ -16,6 +15,8 @@
 [ext_resource type="Resource" uid="uid://cboygfugp7xf4" path="res://resources/heroes/battle_mage.tres" id="9_55fa2"]
 [ext_resource type="Resource" uid="uid://caiy4bqh2vn3o" path="res://resources/heroes/shadow_rogue.tres" id="10_l2txw"]
 [ext_resource type="Script" uid="uid://dx42j73ykak67" path="res://scripts/rooms/RoomData.gd" id="11_55fa2"]
+[ext_resource type="Script" uid="uid://cf8y0vfglbfh4" path="res://scripts/rooms/CardHandUI.gd" id="17_l2txw"]
+[ext_resource type="PackedScene" uid="uid://dpg6a482y72ge" path="res://scenes/rooms/RoomCard.tscn" id="18_8sut0"]
 
 [node name="TestHarness" type="Node2D" unique_id=1615119598]
 script = ExtResource("1")
@@ -33,7 +34,6 @@ starting_hand_cards = Array[ExtResource("11_55fa2")]([ExtResource("2_enmk8"), Ex
 [node name="Dungeon" parent="." unique_id=1831605470 instance=ExtResource("2")]
 
 [node name="Camera2D" type="Camera2D" parent="." unique_id=722064096]
-position = Vector2(0, -100)
 script = ExtResource("3_senuj")
 
 [node name="CanvasLayer" type="CanvasLayer" parent="." unique_id=2078051186]
@@ -71,22 +71,16 @@ text = "Phase: Building"
 layout_mode = 2
 mouse_filter = 2
 
-[node name="SkeletonUpgradedCard" type="Button" parent="CanvasLayer/UI/VBox/Palette" unique_id=1633108843]
-custom_minimum_size = Vector2(120, 60)
+[node name="SkeletonUpgradedCard" parent="CanvasLayer/UI/VBox/Palette" unique_id=1317822416 instance=ExtResource("18_8sut0")]
 layout_mode = 2
-text = "Skeleton Den
-90g"
-script = ExtResource("3")
 
-[node name="SkeletonEliteCard" type="Button" parent="CanvasLayer/UI/VBox/Palette" unique_id=598806218]
-custom_minimum_size = Vector2(120, 60)
+[node name="SkeletonEliteCard" parent="CanvasLayer/UI/VBox/Palette" unique_id=1517738574 instance=ExtResource("18_8sut0")]
 layout_mode = 2
-text = "Skeleton Den
-150g"
-script = ExtResource("3")
 
-[node name="Hand" type="HBoxContainer" parent="CanvasLayer/UI/VBox" unique_id=1978555503]
+[node name="Hand" type="Control" parent="CanvasLayer/UI/VBox" unique_id=1282283276]
 layout_mode = 2
+script = ExtResource("17_l2txw")
+card_view_scene = ExtResource("18_8sut0")
 
 [node name="Buttons" type="HBoxContainer" parent="CanvasLayer/UI/VBox" unique_id=1412035313]
 layout_mode = 2
