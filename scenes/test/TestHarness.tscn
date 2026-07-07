@@ -78,7 +78,9 @@ layout_mode = 2
 layout_mode = 2
 
 [node name="Hand" type="Control" parent="CanvasLayer/UI/VBox" unique_id=1282283276]
+custom_minimum_size = Vector2(0, 300)
 layout_mode = 2
+size_flags_vertical = 8
 script = ExtResource("17_l2txw")
 card_view_scene = ExtResource("18_8sut0")
 
