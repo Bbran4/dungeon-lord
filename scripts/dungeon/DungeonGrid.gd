@@ -9,10 +9,19 @@ class_name DungeonGrid
 ## two clips. Entrance and exit are drawn as darker placeholder rooms so
 ## their footprint is visible even though they hold no RoomData.
 ##
-## Assumes DungeonManager and EconomyManager are autoload singletons.
+## CARD-BASED PLACEMENT: dropping a room onto a RoomGapZone no longer
+## charges gold directly - it consumes one matching card from
+## CardHandManager's hand (see request_insert). The gold cost was
+## already paid when the card was acquired (a starter card, or bought
+## in the shop via ShopManager.buy_room / a card pack). RoomData.cost
+## still drives the shop's price and a room's sell refund - it's just
+## not charged a second time here.
+##
+## Assumes DungeonManager, EconomyManager, and CardHandManager are
+## autoload singletons.
 
 signal room_selected(index: int, room: Room)
-signal room_placed_free(room_data: RoomData)
+signal room_placed(room_data: RoomData)
 
 @export var room_scene: PackedScene
 @export var room_size: Vector2 = Vector2(500, 500)
@@ -42,10 +51,11 @@ func _on_dungeon_changed(_a: Variant = null, _b: Variant = null) -> void:
 	_rebuild_layout()
 
 
-## Spends gold and inserts a room at `index`. Used by RoomGapZone drops.
-## If ShopManager owes a free placement credit for this exact
-## RoomData (a shop purchase or card-pack win), that credit is
-## consumed and no gold is charged - see ShopManager.consume_free_room.
+## Consumes a matching card from the player's hand and inserts a room
+## at `index`. Used by RoomGapZone drops. Refuses if the card isn't
+## actually in hand - dragging is only possible from an existing
+## RoomCard in the hand UI, so this should normally always succeed,
+## but it's checked explicitly rather than assumed.
 func request_insert(index: int, room_data: RoomData) -> bool:
 
 	if GameManager.current_state != GameEnums.GameState.BUILDING:
@@ -57,36 +67,28 @@ func request_insert(index: int, room_data: RoomData) -> bool:
 	if room_data == null:
 		return false
 
-	var is_free: bool = ShopManager.consume_free_room(room_data)
-
-	if not is_free:
-
-		if not EconomyManager.can_afford(room_data.cost):
-			return false
-
-		if not EconomyManager.spend_gold(room_data.cost):
-			return false
+	if not CardHandManager.remove_card(room_data):
+		return false
 
 	var inserted: bool = DungeonManager.insert_room(index, room_data)
 
 	if not inserted:
-		if is_free:
-			# Give the credit back - the insert itself failed for some
-			# other reason (shouldn't normally happen given the checks
-			# above, but this keeps a failed insert from silently
-			# burning a credit the player paid for).
-			ShopManager._free_room_credits[room_data] = ShopManager._free_room_credits.get(room_data, 0) + 1
-		else:
-			EconomyManager.add_gold(room_data.cost)
+		# Give the card back - the insert itself failed for some other
+		# reason (shouldn't normally happen given the checks above, but
+		# this keeps a failed insert from silently burning a card the
+		# player paid for).
+		CardHandManager.add_card(room_data)
 
 	_update_gap_zone_lock_state()
 
-	if inserted and is_free:
-		room_placed_free.emit(room_data)
+	if inserted:
+		room_placed.emit(room_data)
 
 	return inserted
 
-## Spends the cost difference and upgrades the room at `index`.
+## Spends the cost difference and upgrades the room at `index`. Upgrade
+## cards are NOT part of the hand system - they remain always-available
+## in the palette, gold-charged at the cost delta, same as before.
 func request_upgrade(index: int) -> bool:
 
 	if GameManager.current_state != GameEnums.GameState.BUILDING:
@@ -123,9 +125,9 @@ func sell_room_at(index: int) -> bool:
 
 	if removed:
 		EconomyManager.add_gold(refund)
-	
+
 	_update_gap_zone_lock_state()
-	
+
 	return removed
 
 

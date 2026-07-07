@@ -1,9 +1,9 @@
 extends Node2D
 class_name TestHarness
 
-## Exercises the full loop: drag a card to build a room, drag a matching
-## card onto a room to upgrade it, click a room to sell it, and send a
-## multi-hero party through the dungeon.
+## Exercises the full loop: drag a card from your hand to build a room,
+## drag a matching upgrade card onto a room to upgrade it, click a room
+## to sell it, and send a multi-hero party through the dungeon.
 ##
 ## Content is authored as .tres Resources (see resources/) and wired in
 ## below via @export - TestHarness no longer constructs test data in
@@ -23,14 +23,23 @@ class_name TestHarness
 ## kept as an inert placeholder since tier progression is now entirely
 ## outcome-driven.
 ##
-## SHOP-BOUGHT ROOMS are placed via dynamically-created cards, not a
-## single reusable slot - see _on_room_purchased/_on_room_placed_free/
-## _pending_room_cards. Buying (or pack-winning) multiple rooms adds
-## multiple cards side by side; nothing overwrites anything.
+## CARD HAND: the player's hand (CardHandManager.hand) starts with
+## starting_hand_cards and is rendered dynamically into hand_container
+## via _rebuild_hand_ui() every time CardHandManager.hand_changed fires
+## - there's no fixed palette of base room cards anymore. Buying a room
+## in the shop (or winning one from a card pack) adds straight to the
+## hand rather than granting a "free placement credit" - see
+## ShopManager.buy_room / buy_pack. Placing a card is free (no gold
+## charged at drop time, since the gold was already spent acquiring the
+## card) - see DungeonGrid.request_insert.
+##
+## UPGRADE CARDS are NOT part of the hand system - skeleton_upgraded_card
+## and skeleton_elite_card remain fixed, always-available, gold-charged
+## palette entries exactly as before.
 ##
 ## Assumes these are autoload singletons (Project Settings -> Autoload):
 ## GameManager, EconomyManager, DungeonManager, WaveManager, CombatManager,
-## HeroManager, PassiveManager, ShopManager
+## HeroManager, PassiveManager, ShopManager, CardHandManager
 
 @onready var dungeon: Dungeon = $Dungeon
 @onready var dungeon_grid: DungeonGrid = $Dungeon/DungeonGrid
@@ -38,14 +47,11 @@ class_name TestHarness
 @onready var wave_label: Label = $CanvasLayer/UI/VBox/WaveLabel
 @onready var phase_label: Label = $CanvasLayer/UI/VBox/PhaseLabel
 @onready var log_text: RichTextLabel = $CanvasLayer/UI/VBox/LogText
-@onready var skeleton_card: RoomCard = $CanvasLayer/UI/VBox/Palette/SkeletonCard
 @onready var skeleton_upgraded_card: RoomCard = $CanvasLayer/UI/VBox/Palette/SkeletonUpgradedCard
 @onready var skeleton_elite_card: RoomCard = $CanvasLayer/UI/VBox/Palette/SkeletonEliteCard
-@onready var spike_card: RoomCard = $CanvasLayer/UI/VBox/Palette/SpikeCorridorCard
 @onready var send_wave_button: Button = $CanvasLayer/UI/VBox/Buttons/SendWaveButton
 @onready var next_wave_button: Button = $CanvasLayer/UI/VBox/Buttons2/NextWaveButton
-@onready var poison_arrow_card: RoomCard = $CanvasLayer/UI/VBox/Palette/PoisonArrowCard
-@onready var sanctuary_card: RoomCard = $CanvasLayer/UI/VBox/Palette/SanctuaryCard
+@onready var hand_container: HBoxContainer = $CanvasLayer/UI/VBox/Hand
 @onready var shop_panel: Panel = $CanvasLayer/UI/ShopPanel
 @onready var shop_room_buttons: Array[Button] = [
 	$CanvasLayer/UI/ShopPanel/VBox/RoomButtons/RoomButton0,
@@ -60,17 +66,13 @@ class_name TestHarness
 @onready var shop_pack_button: Button = $CanvasLayer/UI/ShopPanel/VBox/ExtrasButtons/PackButton
 @onready var shop_reroll_button: Button = $CanvasLayer/UI/ShopPanel/VBox/ExtrasButtons/RerollButton
 @onready var shop_continue_button: Button = $CanvasLayer/UI/ShopPanel/VBox/ContinueButton
-@onready var palette: HBoxContainer = $CanvasLayer/UI/VBox/Palette
 
 ## Authored content - assign these in the Inspector (or via the scene
 ## file) to point at .tres resources under res://resources/.
 @export var skeleton_room_data: RoomData
 @export var skeleton_room_upgraded_data: RoomData
 @export var skeleton_room_elite_data: RoomData
-@export var spike_corridor_room_data: RoomData
 @export var test_hero_data: HeroData
-@export var poison_arrow_room_data: RoomData
-@export var sanctuary_room_data: RoomData
 
 @export var tank_hero_data: HeroData
 @export var healer_hero_data: HeroData
@@ -78,11 +80,15 @@ class_name TestHarness
 @export var mage_hero_data: HeroData
 @export var rogue_hero_data: HeroData
 
+## The RoomData cards the player's hand starts with each run - assign
+## 3 in the Inspector (e.g. Skeleton Den, Spike Corridor, Sanctuary).
+@export var starting_hand_cards: Array[RoomData] = []
+
 const ROOM_CARD_SCRIPT: Script = preload("res://scripts/rooms/RoomCard.gd")
 
-## Dynamically-created cards for shop-bought / pack-won rooms - see
-## _on_room_purchased / _on_room_placed_free.
-var _pending_room_cards: Array[RoomCard] = []
+## Dynamically-created RoomCard views mirroring CardHandManager.hand,
+## rebuilt in full every time the hand changes - see _rebuild_hand_ui.
+var _hand_card_views: Array[RoomCard] = []
 
 
 func _ready() -> void:
@@ -98,25 +104,19 @@ func _connect_signals() -> void:
 	dungeon.hero_escaped.connect(_on_hero_escaped)
 	dungeon.wave_cleared.connect(_on_wave_cleared)
 	dungeon.trap_triggered.connect(_on_trap_triggered)
-	dungeon_grid.room_placed_free.connect(_on_room_placed_free)
+	dungeon_grid.room_placed.connect(_on_room_placed)
 
 	GameManager.building_phase_started.connect(_on_building_phase_started)
 	GameManager.combat_phase_started.connect(_on_combat_phase_started)
 	GameManager.reward_phase_started.connect(_on_reward_phase_started)
 	GameManager.victory_started.connect(_on_victory_started)
 
-	skeleton_card.drag_started.connect(_on_card_drag_started)
-	skeleton_card.drag_ended.connect(_on_card_drag_ended)
 	skeleton_upgraded_card.drag_started.connect(_on_card_drag_started)
 	skeleton_upgraded_card.drag_ended.connect(_on_card_drag_ended)
 	skeleton_elite_card.drag_started.connect(_on_card_drag_started)
 	skeleton_elite_card.drag_ended.connect(_on_card_drag_ended)
-	spike_card.drag_started.connect(_on_card_drag_started)
-	spike_card.drag_ended.connect(_on_card_drag_ended)
-	poison_arrow_card.drag_started.connect(_on_card_drag_started)
-	poison_arrow_card.drag_ended.connect(_on_card_drag_ended)
-	sanctuary_card.drag_started.connect(_on_card_drag_started)
-	sanctuary_card.drag_ended.connect(_on_card_drag_ended)
+
+	CardHandManager.hand_changed.connect(_on_hand_changed)
 
 	ShopManager.shop_opened.connect(_on_shop_opened)
 	ShopManager.shop_closed.connect(_on_shop_closed)
@@ -140,25 +140,20 @@ func _reset_test() -> void:
 	EconomyManager.reset()
 	PassiveManager.reset()
 	WaveManager.reset()
+	CardHandManager.reset()
 	DungeonManager.generate_dungeon()
 
 	shop_panel.visible = false
 
-	for card: RoomCard in _pending_room_cards:
-		if is_instance_valid(card):
-			card.queue_free()
-	_pending_room_cards.clear()
-
-	skeleton_card.set_room_data(skeleton_room_data)
 	skeleton_upgraded_card.set_room_data(skeleton_room_upgraded_data)
 	skeleton_elite_card.set_room_data(skeleton_room_elite_data)
-	spike_card.set_room_data(spike_corridor_room_data)
-	poison_arrow_card.set_room_data(poison_arrow_room_data)
-	sanctuary_card.set_room_data(sanctuary_room_data)
+
+	for room_data: RoomData in starting_hand_cards:
+		CardHandManager.add_card(room_data)
 
 	_on_gold_changed(EconomyManager.gold)
 	_update_wave_label(WaveManager.current_wave)
-	_log("Test harness reset. Drag a room card into a highlighted gap to build.")
+	_log("Test harness reset. Drag a card from your hand into a highlighted gap to build.")
 	GameManager.start_game()
 
 
@@ -268,8 +263,8 @@ func _on_wave_cleared(full_wipe: bool) -> void:
 
 
 ## Terminal - nothing re-enables these controls except a full reset.
-## Uses _all_room_cards() (not a hardcoded list) so shop-bought cards
-## get locked too, not just the six original palette cards.
+## Uses _all_room_cards() (not a hardcoded list) so hand cards get
+## locked too, not just the two upgrade palette cards.
 func _on_victory_started() -> void:
 	phase_label.text = "Phase: VICTORY"
 	send_wave_button.disabled = true
@@ -419,37 +414,19 @@ func _on_shop_continue_pressed() -> void:
 	GameManager.start_building_phase()
 
 
-## Fires for a shop room purchase AND a card pack's free-room win.
-## Creates a brand-new card each time - buying multiple rooms adds
-## multiple cards side by side, nothing gets overwritten.
+## Fires for a shop room purchase AND a card pack's free-room win. The
+## card already exists in the hand by the time this fires (ShopManager
+## calls CardHandManager.add_card directly) - _on_hand_changed handles
+## rebuilding the visible hand, so this just logs the event.
 func _on_room_purchased(room_data: RoomData) -> void:
-
-	var card: Button = Button.new()
-	card.set_script(ROOM_CARD_SCRIPT)
-	card.custom_minimum_size = Vector2(120, 60)
-	palette.add_child(card)
-	card.set_room_data(room_data)
-
-	var in_building: bool = GameManager.current_state == GameEnums.GameState.BUILDING
-	card.disabled = not in_building
-	card.mouse_filter = Control.MOUSE_FILTER_STOP if in_building else Control.MOUSE_FILTER_IGNORE
-
-	_pending_room_cards.append(card)
-
-	_log("Got %s (free)! Drag it into the dungeon to place it." % room_data.room_name)
+	_log("Got a %s card! Drag it into the dungeon to place it." % room_data.room_name)
 
 
-## Fired by DungeonGrid the instant a free-credit room is actually
-## placed. Removes exactly one matching pending card - which one
-## doesn't matter, since identical RoomData means identical content.
-func _on_room_placed_free(room_data: RoomData) -> void:
-
-	for card: RoomCard in _pending_room_cards:
-		if is_instance_valid(card) and card.room_data == room_data:
-			_pending_room_cards.erase(card)
-			card.queue_free()
-			_log("Room placed!")
-			return
+## Fired by DungeonGrid the instant a card is actually placed as a
+## room. The hand UI already rebuilt itself via _on_hand_changed (card
+## removal fires CardHandManager.hand_changed) - this just logs it.
+func _on_room_placed(room_data: RoomData) -> void:
+	_log("%s placed!" % room_data.room_name)
 
 
 func _on_passive_purchased(passive_data: PassiveData) -> void:
@@ -461,9 +438,43 @@ func _on_pack_opened(description: String) -> void:
 	_refresh_shop_ui()
 
 
+## Rebuilds every hand card view from scratch whenever
+## CardHandManager.hand changes (add or remove). Simpler and safer than
+## trying to diff the hand incrementally, and the hand is small enough
+## (single digits) that this is cheap.
+func _on_hand_changed() -> void:
+	_rebuild_hand_ui()
+
+
+func _rebuild_hand_ui() -> void:
+
+	for card: RoomCard in _hand_card_views:
+		if is_instance_valid(card):
+			card.queue_free()
+	_hand_card_views.clear()
+
+	var in_building: bool = GameManager.current_state == GameEnums.GameState.BUILDING
+
+	for room_data: RoomData in CardHandManager.hand:
+
+		var card: Button = Button.new()
+		card.set_script(ROOM_CARD_SCRIPT)
+		card.custom_minimum_size = Vector2(120, 60)
+		hand_container.add_child(card)
+		card.set_room_data(room_data)
+
+		card.disabled = not in_building
+		card.mouse_filter = Control.MOUSE_FILTER_STOP if in_building else Control.MOUSE_FILTER_IGNORE
+
+		card.drag_started.connect(_on_card_drag_started)
+		card.drag_ended.connect(_on_card_drag_ended)
+
+		_hand_card_views.append(card)
+
+
 func _all_room_cards() -> Array[RoomCard]:
-	var cards: Array[RoomCard] = [skeleton_card, skeleton_upgraded_card, skeleton_elite_card, spike_card, poison_arrow_card, sanctuary_card]
-	cards.append_array(_pending_room_cards)
+	var cards: Array[RoomCard] = [skeleton_upgraded_card, skeleton_elite_card]
+	cards.append_array(_hand_card_views)
 	return cards
 
 

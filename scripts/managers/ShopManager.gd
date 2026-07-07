@@ -21,15 +21,13 @@ extends Node
 ## upgraded tiers are reached via the in-dungeon upgrade path, not
 ## bought outright here.
 ##
-## FREE ROOM CREDITS: buying a room (or winning one from a card pack)
-## does NOT insert it directly - it grants a "free credit" for that
-## exact RoomData resource, tracked in _free_room_credits. The player
-## places it themselves by dragging a card (TestHarness dynamically
-## creates one new card per credit - see room_purchased). Buying/
-## winning the same room type more than once stacks additional credits
-## and additional cards, rather than replacing anything.
-## DungeonGrid.request_insert() calls consume_free_room() right before
-## it would otherwise charge gold.
+## CARD HAND: buying a room (or winning one from a card pack) no longer
+## grants a "free placement credit" - it adds the RoomData straight to
+## CardHandManager's hand (see CardHandManager.add_card). The player
+## places it themselves by dragging the resulting card out of their
+## hand UI. Buying/winning the same room type more than once adds
+## another copy of that card to the hand, rather than stacking a
+## credit counter.
 
 signal shop_opened
 signal shop_closed
@@ -74,12 +72,6 @@ var is_open: bool = false
 ## True once a reroll has been used THIS shop visit. Reset by
 ## open_shop(). Checked by reroll() before anything else.
 var _reroll_used: bool = false
-
-## RoomData -> int. How many free placements of that exact resource are
-## currently owed to the player. Incremented by a room purchase or a
-## card pack's free-room roll; decremented by consume_free_room()
-## whenever the room is actually placed.
-var _free_room_credits: Dictionary = {}
 
 
 func open_shop() -> void:
@@ -151,8 +143,8 @@ func get_price(category: String, index: int) -> int:
 ## Buys the room at `index`. Each offer slot can only be bought once per
 ## shop visit (until a reroll refreshes bought status), but buying one
 ## room offer does NOT block buying a different room offer, or any
-## passive offer. Grants a free placement credit rather than inserting
-## directly - see room_purchased / consume_free_room.
+## passive offer. Adds the RoomData straight to the player's hand - see
+## CardHandManager.add_card.
 func buy_room(index: int) -> bool:
 
 	if index < 0 or index >= room_offers.size() or room_bought[index]:
@@ -164,7 +156,7 @@ func buy_room(index: int) -> bool:
 	room_bought[index] = true
 
 	var room_data: RoomData = room_offers[index]
-	_free_room_credits[room_data] = _free_room_credits.get(room_data, 0) + 1
+	CardHandManager.add_card(room_data)
 
 	room_purchased.emit(room_data)
 	return true
@@ -218,8 +210,8 @@ func buy_pack() -> bool:
 				pack_opened.emit("Card Pack: nothing to give - refunded.")
 			else:
 				var room_data: RoomData = room_pool[randi() % room_pool.size()]
-				_free_room_credits[room_data] = _free_room_credits.get(room_data, 0) + 1
-				pack_opened.emit("Card Pack: a free room - %s!" % room_data.room_name)
+				CardHandManager.add_card(room_data)
+				pack_opened.emit("Card Pack: a free room card - %s!" % room_data.room_name)
 				room_purchased.emit(room_data)
 
 		2:
@@ -236,34 +228,6 @@ func buy_pack() -> bool:
 	return true
 
 
-## Called by DungeonGrid.request_insert right before it would otherwise
-## charge gold for `room_data`. If a free credit is owed for this exact
-## resource, consumes ONE and returns true (place it for free);
-## otherwise returns false and the normal gold cost applies.
-func consume_free_room(room_data: RoomData) -> bool:
-
-	var remaining: int = _free_room_credits.get(room_data, 0)
-
-	if remaining <= 0:
-		return false
-
-	if remaining <= 1:
-		_free_room_credits.erase(room_data)
-	else:
-		_free_room_credits[room_data] = remaining - 1
-
-	return true
-
-
-## Also usable by DungeonGrid.request_insert's rollback path if an
-## insert fails after a credit was already consumed.
-func refund_room_credit(room_data: RoomData) -> void:
-	_free_room_credits[room_data] = _free_room_credits.get(room_data, 0) + 1
-
-
-## Passives already maxed out (PassiveManager.can_apply() == false) are
-## excluded from the pool entirely, so a fully-stacked passive stops
-## appearing as an offer at all rather than showing up unbuyable.
 func _generate_offers() -> void:
 
 	room_offers = _pick_random_unique(room_pool, 3)

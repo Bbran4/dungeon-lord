@@ -25,6 +25,7 @@ HeroManager="*uid://ddqslnjbvtl03"
 WaveManager="*uid://c5oi4guafvnku"
 PassiveManager="*uid://dctiwctrebkwm"
 ShopManager="*uid://c8ufrft25f663"
+CardHandManager="*uid://fg02wu1va2s1"
 
 [display]
 
