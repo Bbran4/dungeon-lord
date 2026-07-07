@@ -77,11 +77,19 @@ Cards modify:
 
 Every run becomes a unique build.
 
-> **Status:** not yet implemented as designed. A **post-wave shop**
-> (see Post-Wave Shop System below) currently fills this slot in the
-> loop instead — it offers rooms and permanent passives for gold rather
-> than a drafted card choice. `CardData.rarity` exists as a field but
-> is unused; the actual draft system is Milestone 3.
+> **Status:** Milestone 3 is now genuinely in progress rather than not
+> started. Rooms and traps ARE the cards — there's no separate
+> ability-modifier card type. The player holds a real **hand**
+> (`CardHandManager`, starting at 3 cards), rendered as a fanned,
+> poker/Yu-Gi-Oh-style hand of visual cards (`CardHandUI` +
+> `RoomCard.gd`) that peek up from the bottom of the screen and rise
+> fully into view on hover. Dragging a card out of the hand places its
+> room/trap — the same `RoomGapZone`/`RoomUpgradeZone` drop targets as
+> before. What's still missing from the original vision: the shop lets
+> you **buy** any/all of its offered cards rather than forcing a single
+> drafted choice, and there's no ability-modifier ("+15% trap damage",
+> "hero debuff") card type — see Post-Wave Shop System and Milestone 3
+> below for the full breakdown.
 
 ### 🌍 Biome Progression
 
@@ -131,6 +139,12 @@ Spend gold to:
 > gold multiplier (see Passives below) is applied on top of both, as a
 > separate multiplicative layer. See `EconomyManager.gd` and
 > `Dungeon.send_wave()`.
+>
+> **Placing a card no longer costs gold at drop time** — the cost was
+> already paid when the card was acquired (a free starter card, or
+> bought in the shop). `RoomData.cost` still drives the shop's price
+> and a room's sell refund, just not charged a second time on
+> placement — see Card Hand System below.
 
 ### Dark Essence
 
@@ -157,11 +171,11 @@ Start Run
 
 ↓
 
-Receive Starting Gold
+Receive Starting Hand (3 cards) + Starting Gold
 
 ↓
 
-Build Dungeon
+Build Dungeon (drag cards from hand into gaps)
 
 ↓
 
@@ -181,7 +195,7 @@ Earn Gold
 
 ↓
 
-Post-Wave Shop (rooms, passives, packs) — substitutes for Card Drafting for now
+Post-Wave Shop (buy cards into your hand, buy passives, buy packs) — substitutes for a drafted Card choice for now
 
 ↓
 
@@ -252,6 +266,15 @@ Examples:
 > a hard ceiling — `DungeonGrid` locks every gap zone once at cap so no
 > drop is even accepted, and unlocks them again the moment a room is
 > sold.
+
+> **Status (card-facing fields):** `RoomData` now carries a
+> `description` field (`@export_multiline`) for card flavor text, and
+> `rarity` has been converted from a free-standing string enum to a
+> real `GameEnums.Rarity` value — the first of the "still independent
+> string enum" fields flagged in Data-Driven Architecture below to get
+> centralized. Rarity now actually drives something in gameplay: a
+> card's border color in `RoomCard.gd` (Common/Rare/Epic/Legendary each
+> get a distinct tint).
 
 ---
 
@@ -376,24 +399,67 @@ Elite raids may contain:
 
 ---
 
+### Card Hand System
+
+The player's build cards live in a real hand rather than an
+always-available, unlimited-use palette.
+
+* **`CardHandManager`** (autoload) is the single source of truth for
+  which `RoomData` cards the player currently holds
+  (`CardHandManager.hand`). A "card" is just a `RoomData` resource —
+  the same resource that already describes a room/trap — so there's no
+  separate card data type for build cards.
+* **Starting hand:** 3 cards, configured via `TestHarness.starting_hand_cards`
+  and dealt out at run reset.
+* **Acquiring more cards:** the *only* way to gain cards after the
+  starting hand is buying a room in the post-wave shop
+  (`ShopManager.buy_room`) or winning one from a card pack
+  (`ShopManager.buy_pack`) — both add straight to the hand via
+  `CardHandManager.add_card` rather than granting a "free placement
+  credit" like the old shop-only flow did.
+* **Placing a card:** dragging a card out of the hand onto a
+  `RoomGapZone` calls `DungeonGrid.request_insert`, which now consumes
+  the matching card from the hand (`CardHandManager.remove_card`)
+  instead of charging gold directly — placement is free, since the
+  gold was already spent acquiring the card. A failed insert refunds
+  the card back to the hand.
+* **Upgrade cards are NOT part of the hand system.** The two upgrade
+  palette entries remain fixed, always-available, gold-delta-charged
+  slots exactly as before — only *base-tier* room/trap acquisition
+  moved to the hand.
+* **Visual presentation (`CardHandUI` + `RoomCard.gd`):** cards are
+  real visual cards, not buttons — rarity-tinted border
+  (Common/Rare/Epic/Legendary), a gold-cost badge, room icon/art, and a
+  description (falling back to a short auto-generated blurb if
+  `RoomData.description` hasn't been authored yet). The hand fans out
+  poker/Yu-Gi-Oh-style and is deliberately clipped so only the top
+  sliver of each resting card peeks above the bottom of the screen;
+  hovering a card reparents it into an unclipped overlay layer so it
+  can rise fully into view without being cut off, then settles back
+  into the fan on unhover (or once a drag actually finishes).
+
+See `CardHandManager.gd`, `CardHandUI.gd`, `RoomCard.gd`.
+
+---
+
 ### Post-Wave Shop System
 
 The shop opens automatically after every full-wipe wave clear (an
 escape sends the player straight back to Building to retry the same
 wave — no shop, since nothing was actually won).
 
-* **Room offers:** 3 random base-tier rooms per visit. Buying one
-  doesn't insert it directly — it grants a free placement credit,
-  redeemed by dragging a dynamically-created card onto the dungeon
-  (`ShopManager.consume_free_room`). Buying (or pack-winning) the same
-  room type twice stacks additional credits/cards rather than
-  overwriting anything.
+* **Room offers:** 3 random base-tier rooms per visit. Buying one adds
+  it directly to the player's hand (see Card Hand System above) rather
+  than granting a placement credit. Buying (or pack-winning) the same
+  room type twice adds another copy of that card to the hand.
 * **Passive offers:** 3 random permanent passives per visit (see
   Passives below). Passives that have hit their stack cap are filtered
   out of the offer pool entirely.
 * **Per-slot purchase limit:** each of the 6 offer slots (3 room + 3
   passive) can only be bought once per visit — buying one room offer
-  does not block buying a different room or any passive.
+  does not block buying a different room or any passive. This is
+  deliberately **not** a forced single choice — the original vision's
+  "choose one card" draft still doesn't exist; see Milestone 3.
 * **Reroll:** limited to once per visit. Reshuffles every slot except
   whichever one currently holds the discount, and resets every slot's
   bought status back to available.
@@ -401,9 +467,10 @@ wave — no shop, since nothing was actually won).
   discounted (`discount_ratio`, currently 50%) and survives a reroll
   unchanged.
 * **Card packs:** unlimited purchases at a flat cost, unaffected by
-  reroll or the per-slot limit. Each pack randomly rewards gold, a free
-  room credit, or a passive; a roll that can't be granted (empty pool,
-  or a maxed-out passive) refunds the pack's cost instead of wasting it.
+  reroll or the per-slot limit. Each pack randomly rewards gold, a
+  room card added to the hand, or a passive; a roll that can't be
+  granted (empty pool, or a maxed-out passive) refunds the pack's cost
+  instead of wasting it.
 
 See `ShopManager.gd`.
 
@@ -477,11 +544,12 @@ Everything should be data-driven using Godot Resources.
 > those files in via `@export` fields — adding a new monster, room,
 > trap, ability, hero, or passive no longer requires touching any
 > script. Enum-like fields (`AbilityData.ability_type`/`target_rule`,
-> `TrapData.trap_type`, `PassiveData.effect_type`) are centralized as
-> real enums on `GameEnums` rather than each resource declaring its own
-> `@export_enum` string — `RoomData.room_type`, `HeroData.class_type`,
-> and `CardData.rarity` are still their own independent string enums
-> and haven't been converted yet.
+> `TrapData.trap_type`, `PassiveData.effect_type`, and now
+> `RoomData.rarity`) are centralized as real enums on `GameEnums`
+> rather than each resource declaring its own `@export_enum` string —
+> `RoomData.room_type`, `HeroData.class_type`, and `CardData.rarity`
+> are still their own independent string enums and haven't been
+> converted yet.
 
 ---
 
@@ -511,8 +579,10 @@ even on an already-freed entry.
 What's actually playable today, via `scenes/test/TestHarness.tscn`:
 
 * ✅ Linear dungeon path (entrance → rooms → exit) rendered by `DungeonGrid`, capped at 6 rooms with gap-zone locking at the cap
-* ✅ Drag a `RoomCard` from the palette into a `RoomGapZone` to build a room (spends gold)
-* ✅ Drag a matching card onto a room's upgrade prompt to upgrade it (spends the cost delta); upgrade chains of 3+ tiers work correctly, matched by exact resource rather than by room name
+* ✅ **Card hand system:** the player starts with 3 cards (`CardHandManager`); dragging a card from a fanned, poker/Yu-Gi-Oh-style hand (`CardHandUI`) into a `RoomGapZone` places its room/trap for free — the gold cost was already paid when the card was acquired
+* ✅ **Visual cards:** `RoomCard.gd` renders each card with a rarity-tinted border (`GameEnums.Rarity`), gold-cost badge, room icon/art, and description (auto-generated fallback if not authored) — the same view backs both hand cards and the two fixed upgrade-only palette entries
+* ✅ **Hand presentation:** cards peek up from the bottom of the screen and rise fully into view on hover via an unclipped overlay layer, settling back into the fan on unhover or once a drag finishes
+* ✅ Drag a matching upgrade card onto a room's upgrade prompt to upgrade it (spends the cost delta, NOT part of the hand system); upgrade chains of 3+ tiers work correctly, matched by exact resource rather than by room name
 * ✅ Click a room to select it and reveal a Sell button (refunds half cost)
 * ✅ Rooms visually display their occupying monster's name, not just the room name
 * ✅ Trap rooms: INSTANT traps resolve as a single probabilistic damage instance (no counter-attack, no `CombatManager`); PROJECTILE traps fire pooled `TrapArrow` visuals continuously for the whole wave regardless of party position, dealing an initial hit plus a multi-tick DoT, with configurable concurrent arrow count
@@ -526,7 +596,7 @@ What's actually playable today, via `scenes/test/TestHarness.tscn`:
 * ✅ Full class kits for all five hero classes, including melee/ranged distinction and projectile visuals
 * ✅ Outcome-driven wave tiers: only a full wipe advances the tier (linear stat + gold scaling per tier survived); an escape retries the same-strength wave
 * ✅ **10-wave victory condition:** fully wiping tier 10 triggers a real run-level VICTORY state (`GameManager.start_victory()`), locking all controls — not just an infinite tier counter
-* ✅ **Post-wave shop:** opens on every full-wipe clear — 3 room + 3 passive offers (each slot buyable once per visit), a once-per-visit reroll, unlimited card packs, and a per-visit discounted slot; purchased rooms are placed via free-credit cards rather than direct insertion
+* ✅ **Post-wave shop:** opens on every full-wipe clear — 3 room + 3 passive offers (each slot buyable once per visit), a once-per-visit reroll, unlimited card packs, and a per-visit discounted slot; purchased rooms are added straight to the card hand rather than granting a placement credit
 * ✅ **Passives:** 5 authored passives (gold/monster-damage/monster-health/trap-damage multipliers, reroll discount), additive stacking, with per-passive stack caps enforced at purchase time
 * ✅ **Hero lifecycle safety:** the freed-object crash class is resolved via `_is_alive()` guards at every call boundary that reads a hero/monster reference after `begin_combat`/movement/trap resolution — see Stability section above
 * ✅ Gold economy, wave counter, and a scrolling event log
@@ -535,15 +605,16 @@ What's actually playable today, via `scenes/test/TestHarness.tscn`:
 * ✅ `HeroManager.spawn_hero`/`remove_hero`/`active_heroes` backs `Dungeon.gd`'s hero tracking directly — no more private hero counter
 * ✅ Room/monster/trap/ability/hero/passive content authored as real `.tres` resources under `resources/`, wired into `TestHarness` via `@export` fields
 * ✅ Gold is earned per-hero based on damage taken vs. effective max health, plus a full-wipe bonus and a passive gold multiplier layered on top — not from winning fights or clearing rooms (see `EconomyManager.gd`)
-* ✅ Enum-like data (`AbilityData.ability_type`/`target_rule`, `TrapData.trap_type`, `PassiveData.effect_type`) centralized on `GameEnums` rather than duplicated as independent `@export_enum` strings per resource
+* ✅ Enum-like data (`AbilityData.ability_type`/`target_rule`, `TrapData.trap_type`, `PassiveData.effect_type`, `RoomData.rarity`) centralized on `GameEnums` rather than duplicated as independent `@export_enum` strings per resource
 
 Notably **not yet wired up**, despite the underlying scripts existing:
 
-* ⬜ No card draft system — the post-wave shop currently fills this role instead; `CardData.rarity` exists but is unused
+* ⬜ No forced single-choice draft — the shop lets the player buy any/all of its offered cards rather than picking exactly one, and there's no ability-modifier ("+15% trap damage", hero debuff) card type; `CardData` (the original standalone card resource) is unused — rooms/traps ARE the cards instead
 * ⬜ `BossData` has no room encounter, phase, or summon logic
-* ⬜ `RoomData.room_type`, `HeroData.class_type`, and `CardData.rarity` are still independent `@export_enum` strings, not yet centralized on `GameEnums` like `AbilityData`/`TrapData`/`PassiveData` were
+* ⬜ `RoomData.room_type`, `HeroData.class_type`, and `CardData.rarity` are still independent `@export_enum` strings, not yet centralized on `GameEnums` — `RoomData.rarity` WAS just converted and is no longer on this list
 * ⬜ No hero-side targeting AI — heroes (and their abilities) still pick a random living enemy rather than anything priority-based
 * ⬜ No economy/gold-cost tuning pass yet — numbers are functional placeholders, not balanced
+* ⬜ Hand size is uncapped — buying cards without placing any just keeps growing the fanned hand sideways/overlapping, with no overflow handling yet
 
 > **Architecture note:** the original plan called this a "Dungeon Grid,"
 > but what's implemented is a **linear ordered path** (`DungeonManager`
@@ -578,7 +649,7 @@ Players should constantly think:
 5. ✅ Gold Economy
 6. ✅ Room Upgrades
 7. ✅ Wave System *(outcome-driven tier: only advances on a full wipe; linear stat + gold scaling per tier; 10-wave victory condition — see Wave Progression)*
-8. 🟡 Card Drafting *(post-wave shop with rooms/passives/packs substitutes for this today; the actual draft system is still Milestone 3)*
+8. 🟡 Card Drafting *(rooms/traps are now real cards held in an actual hand, drawn via the shop and dragged out to place — see Card Hand System; still missing a forced single-choice draft and any ability-modifier card type)*
 9. 🟡 Hero Parties *(parties move and fight together with class formation, aggro/taunt, melee-vs-ranged, and all five class kits implemented; still no hero-side targeting AI — see Milestone 4)*
 10. ⬜ Boss Room
 11. ⬜ Biomes
@@ -628,7 +699,7 @@ Expand the player's choices.
 
 * ✅ Multiple room types *(Trap rooms — both INSTANT and PROJECTILE/DoT variants — and Utility rooms are all implemented; see `TrapData`/`spike_corridor.tres`/`poison_arrow_corridor.tres` and `sanctuary_room.tres`)*
 * ✅ Room upgrades *(multi-tier chains work end-to-end — validated with a 3-tier Skeleton Den; `RoomUpgradeZone` now matches the exact upgrade resource rather than by room name, fixing a bug that would've misfired once a room had 2+ upgrade tiers)*
-* 🟡 Economy balancing *(all five classes have real kits, a post-wave shop, and 5 passives now exist, giving the economy real levers to pull — but the actual gold/cost number-tuning pass itself still hasn't happened; carrying forward rather than blocking the milestone on it)*
+* 🟡 Economy balancing *(all five classes have real kits, a post-wave shop, a real card hand, and 5 passives now exist, giving the economy real levers to pull — but the actual gold/cost number-tuning pass itself still hasn't happened; carrying forward rather than blocking the milestone on it)*
 * ✅ Dungeon expansion (insert/remove rooms mid-run, capped at 6 rooms)
 * ✅ Multiple waves *(outcome-driven tier progression with linear stat/gold scaling, plus a 10-wave victory condition — see Wave Progression; no per-wave CONTENT variation yet, e.g. new room/monster pools unlocking at higher tiers)*
 
@@ -641,7 +712,7 @@ Expand the player's choices.
 
 ---
 
-## 🟠 MILESTONE 3 — Card System (NOT STARTED)
+## 🟠 MILESTONE 3 — Card System (IN PROGRESS)
 
 ### Goal
 
@@ -649,11 +720,11 @@ Introduce build variety.
 
 ### Tasks
 
-* ⬜ Card rewards
-* ⬜ Draft system
-* ⬜ Card rarities *(`CardData.rarity` exists, unused in gameplay)*
+* ✅ Card rewards *(buying a room in the shop, or winning one from a card pack, adds a real card to the player's hand — see Card Hand System)*
+* ⬜ Draft system *(no forced single-choice pick yet — the shop lets the player buy any/all of its 3 room + 3 passive offers, which is closer to a shop than a draft)*
+* ✅ Card rarities *(`RoomData.rarity` is now a real `GameEnums.Rarity` enum and actually drives gameplay-visible border color/tier on `RoomCard` — the first real use beyond an unused field)*
 * ⬜ Synergies
-* ⬜ Card packs *(a shop "card pack" already exists as a gold/room/passive lucky-dip — see Post-Wave Shop System — but it isn't a drafted-card pack in the originally designed sense)*
+* 🟡 Card packs *(a shop "card pack" exists as a gold/room-card/passive lucky-dip — see Post-Wave Shop System — functional, but not the originally-envisioned drafted-card pack)*
 
 ### Success Criteria
 
