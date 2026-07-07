@@ -115,12 +115,6 @@ text = "Sanctuary
 60g"
 script = ExtResource("3")
 
-[node name="PendingRoomCard" type="Button" parent="CanvasLayer/UI/VBox/Palette" unique_id=1996174929]
-visible = false
-custom_minimum_size = Vector2(120, 60)
-layout_mode = 2
-script = ExtResource("3")
-
 [node name="Buttons" type="HBoxContainer" parent="CanvasLayer/UI/VBox" unique_id=1412035313]
 layout_mode = 2
 mouse_filter = 2

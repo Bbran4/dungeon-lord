@@ -2,16 +2,26 @@ extends Node
 
 ## The post-wave shop, opened once per full-wipe wave clear (see
 ## TestHarness._on_reward_phase_started). Offers 3 random rooms and 3
-## random passives; the player may buy at most ONE room and ONE passive
-## per shop visit. One random slot (room OR passive) is discounted.
-## A reroll (cost scales down via PassiveManager.get_reroll_discount())
-## reshuffles every slot EXCEPT the discounted one. A card pack (fixed
-## cost, unlimited purchases) grants a random reward: gold, a free room,
-## or a free passive.
+## random passives. Each individual offer SLOT can only be bought ONCE
+## per shop visit - NOT "one room total" or "one passive total". The
+## player may buy multiple DIFFERENT room/passive offers in the same
+## visit; they just can't buy the exact same offered slot twice.
+## Rerolling resets every slot's bought status back to available (as
+## well as reshuffling every slot except the discounted one).
 ##
 ## Room offers are drawn only from base-tier RoomData - already-
 ## upgraded tiers are reached via the in-dungeon upgrade path, not
 ## bought outright here.
+##
+## FREE ROOM CREDITS: buying a room (or winning one from a card pack)
+## does NOT insert it directly - it grants a "free credit" for that
+## exact RoomData resource, tracked in _free_room_credits. The player
+## places it themselves by dragging a card (TestHarness dynamically
+## creates one new card per credit - see room_purchased). Buying/
+## winning the same room type more than once stacks additional credits
+## and additional cards, rather than replacing anything.
+## DungeonGrid.request_insert() calls consume_free_room() right before
+## it would otherwise charge gold.
 
 signal shop_opened
 signal shop_closed
@@ -42,18 +52,26 @@ signal pack_opened(description: String)
 var room_offers: Array[RoomData] = []
 var passive_offers: Array[PassiveData] = []
 
+## Per-offer-slot bought flags, sized to match room_offers/passive_offers.
+## Reset to all-false by both open_shop() and reroll() - a reroll makes
+## every slot available again, even ones already bought before it.
+var room_bought: Array[bool] = []
+var passive_bought: Array[bool] = []
+
 var discount_category: String = "room"  # "room" or "passive"
 var discount_index: int = 0
 
-var room_bought: bool = false
-var passive_bought: bool = false
 var is_open: bool = false
+
+## RoomData -> int. How many free placements of that exact resource are
+## currently owed to the player. Incremented by a room purchase or a
+## card pack's free-room roll; decremented by consume_free_room()
+## whenever the room is actually placed.
+var _free_room_credits: Dictionary = {}
 
 
 func open_shop() -> void:
 	is_open = true
-	room_bought = false
-	passive_bought = false
 	_generate_offers()
 	_pick_discount()
 	shop_opened.emit()
@@ -69,7 +87,8 @@ func get_reroll_cost() -> int:
 
 
 ## Reshuffles every offer slot EXCEPT whichever one currently holds the
-## discount, so the discounted item survives a reroll unchanged.
+## discount, so the discounted item survives a reroll unchanged. Also
+## resets EVERY slot's bought status back to available.
 func reroll() -> bool:
 
 	if not EconomyManager.spend_gold(get_reroll_cost()):
@@ -105,35 +124,49 @@ func get_price(category: String, index: int) -> int:
 	return base_cost
 
 
+## Buys the room at `index`. Each offer slot can only be bought once per
+## shop visit (until a reroll refreshes bought status), but buying one
+## room offer does NOT block buying a different room offer, or any
+## passive offer. Grants a free placement credit rather than inserting
+## directly - see room_purchased / consume_free_room.
 func buy_room(index: int) -> bool:
 
-	if room_bought or index < 0 or index >= room_offers.size():
+	if index < 0 or index >= room_offers.size() or room_bought[index]:
 		return false
 
 	if not EconomyManager.spend_gold(get_price("room", index)):
 		return false
 
-	room_bought = true
-	room_purchased.emit(room_offers[index])
+	room_bought[index] = true
+
+	var room_data: RoomData = room_offers[index]
+	_free_room_credits[room_data] = _free_room_credits.get(room_data, 0) + 1
+
+	room_purchased.emit(room_data)
 	return true
 
 
+## Buys the passive at `index`. Same per-slot (not per-category) limit
+## as buy_room - buying one passive offer doesn't block buying another.
 func buy_passive(index: int) -> bool:
 
-	if passive_bought or index < 0 or index >= passive_offers.size():
+	if index < 0 or index >= passive_offers.size() or passive_bought[index]:
 		return false
 
 	if not EconomyManager.spend_gold(get_price("passive", index)):
 		return false
 
-	passive_bought = true
-	PassiveManager.apply_passive(passive_offers[index])
-	passive_purchased.emit(passive_offers[index])
+	passive_bought[index] = true
+
+	var passive_data: PassiveData = passive_offers[index]
+	PassiveManager.apply_passive(passive_data)
+	passive_purchased.emit(passive_data)
 	return true
 
 
 ## Unlimited purchases, always at flat pack_cost - not affected by
-## reroll or the room/passive "1 per visit" limit.
+## reroll or the per-offer "once per visit" limit (packs aren't offer
+## slots at all).
 func buy_pack() -> bool:
 
 	if not EconomyManager.spend_gold(pack_cost):
@@ -154,6 +187,7 @@ func buy_pack() -> bool:
 				pack_opened.emit("Card Pack: nothing to give - refunded.")
 			else:
 				var room_data: RoomData = room_pool[randi() % room_pool.size()]
+				_free_room_credits[room_data] = _free_room_credits.get(room_data, 0) + 1
 				pack_opened.emit("Card Pack: a free room - %s!" % room_data.room_name)
 				room_purchased.emit(room_data)
 
@@ -169,9 +203,37 @@ func buy_pack() -> bool:
 	return true
 
 
+## Called by DungeonGrid.request_insert right before it would otherwise
+## charge gold for `room_data`. If a free credit is owed for this exact
+## resource, consumes ONE and returns true (place it for free);
+## otherwise returns false and the normal gold cost applies.
+func consume_free_room(room_data: RoomData) -> bool:
+
+	var remaining: int = _free_room_credits.get(room_data, 0)
+
+	if remaining <= 0:
+		return false
+
+	if remaining <= 1:
+		_free_room_credits.erase(room_data)
+	else:
+		_free_room_credits[room_data] = remaining - 1
+
+	return true
+
+
 func _generate_offers() -> void:
+
 	room_offers = _pick_random_unique(room_pool, 3)
 	passive_offers = _pick_random_unique(passive_pool, 3)
+
+	room_bought = []
+	room_bought.resize(room_offers.size())
+	room_bought.fill(false)
+
+	passive_bought = []
+	passive_bought.resize(passive_offers.size())
+	passive_bought.fill(false)
 
 
 func _pick_random_unique(pool: Array, count: int) -> Array:

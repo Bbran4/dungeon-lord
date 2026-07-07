@@ -12,6 +12,7 @@ class_name DungeonGrid
 ## Assumes DungeonManager and EconomyManager are autoload singletons.
 
 signal room_selected(index: int, room: Room)
+signal room_placed_free(room_data: RoomData)
 
 @export var room_scene: PackedScene
 @export var room_size: Vector2 = Vector2(500, 500)
@@ -42,6 +43,9 @@ func _on_dungeon_changed(_a: Variant = null, _b: Variant = null) -> void:
 
 
 ## Spends gold and inserts a room at `index`. Used by RoomGapZone drops.
+## If ShopManager owes a free placement credit for this exact
+## RoomData (a shop purchase or card-pack win), that credit is
+## consumed and no gold is charged - see ShopManager.consume_free_room.
 func request_insert(index: int, room_data: RoomData) -> bool:
 
 	if GameManager.current_state != GameEnums.GameState.BUILDING:
@@ -53,21 +57,34 @@ func request_insert(index: int, room_data: RoomData) -> bool:
 	if room_data == null:
 		return false
 
-	if not EconomyManager.can_afford(room_data.cost):
-		return false
+	var is_free: bool = ShopManager.consume_free_room(room_data)
 
-	if not EconomyManager.spend_gold(room_data.cost):
-		return false
+	if not is_free:
+
+		if not EconomyManager.can_afford(room_data.cost):
+			return false
+
+		if not EconomyManager.spend_gold(room_data.cost):
+			return false
 
 	var inserted: bool = DungeonManager.insert_room(index, room_data)
 
 	if not inserted:
-		EconomyManager.add_gold(room_data.cost)
-		
-	_update_gap_zone_lock_state()
-	
-	return inserted
+		if is_free:
+			# Give the credit back - the insert itself failed for some
+			# other reason (shouldn't normally happen given the checks
+			# above, but this keeps a failed insert from silently
+			# burning a credit the player paid for).
+			ShopManager._free_room_credits[room_data] = ShopManager._free_room_credits.get(room_data, 0) + 1
+		else:
+			EconomyManager.add_gold(room_data.cost)
 
+	_update_gap_zone_lock_state()
+
+	if inserted and is_free:
+		room_placed_free.emit(room_data)
+
+	return inserted
 
 ## Spends the cost difference and upgrades the room at `index`.
 func request_upgrade(index: int) -> bool:
