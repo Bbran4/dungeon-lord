@@ -49,6 +49,12 @@ Every run is about creating increasingly powerful synergies between rooms, monst
 * Expand your dungeon during a run
 * Create powerful room combinations
 
+> **Status:** implemented, with a hard cap. `DungeonManager.max_rooms`
+> (6) limits how many rooms a dungeon can hold at once — once at cap,
+> every `RoomGapZone` locks itself (`DungeonGrid._update_gap_zone_lock_state`),
+> refusing to even show itself during a card drag, let alone accept a
+> drop. Selling a room re-opens a slot immediately.
+
 ### ⚔️ Hero Raids
 
 * Heroes spawn in organized parties
@@ -70,6 +76,12 @@ Cards modify:
 * Dungeon-wide effects
 
 Every run becomes a unique build.
+
+> **Status:** not yet implemented as designed. A **post-wave shop**
+> (see Post-Wave Shop System below) currently fills this slot in the
+> loop instead — it offers rooms and permanent passives for gold rather
+> than a drafted card choice. `CardData.rarity` exists as a field but
+> is unused; the actual draft system is Milestone 3.
 
 ### 🌍 Biome Progression
 
@@ -115,8 +127,10 @@ Spend gold to:
 > bonus scaled off the party's combined value. Both a hero's stats AND
 > their `gold_value` scale together with the current wave tier (see
 > Wave Progression below), so the gold-per-damage-point rate stays
-> constant as waves get tougher rather than degrading. See
-> `EconomyManager.gd` and `Dungeon.send_wave()`.
+> constant as waves get tougher rather than degrading. A `PassiveManager`
+> gold multiplier (see Passives below) is applied on top of both, as a
+> separate multiplicative layer. See `EconomyManager.gd` and
+> `Dungeon.send_wave()`.
 
 ### Dark Essence
 
@@ -130,6 +144,9 @@ Used to unlock:
 * New bosses
 * New biomes
 * Starting bonuses
+
+> **Status:** not started. No `DarkEssence`-equivalent resource or
+> unlock system exists yet — this is Milestone 7.
 
 ---
 
@@ -156,7 +173,7 @@ Heroes Fight Through Dungeon
 
 ↓
 
-Victory
+Victory (Full Wipe) / Retry (Escape)
 
 ↓
 
@@ -164,7 +181,7 @@ Earn Gold
 
 ↓
 
-Choose Card
+Post-Wave Shop (rooms, passives, packs) — substitutes for Card Drafting for now
 
 ↓
 
@@ -172,23 +189,23 @@ Upgrade Dungeon
 
 ↓
 
-Next Wave
+Next Wave (tier scales up only after a full wipe)
 
 ↓
 
-Biome Boss
+Wave 10 Full Wipe → RUN VICTORY
 
 ↓
 
-Next Biome
+Biome Boss (not yet implemented)
 
 ↓
 
-Run Ends
+Next Biome (not yet implemented)
 
 ↓
 
-Spend Dark Essence
+Spend Dark Essence (not yet implemented)
 
 ↓
 
@@ -230,6 +247,11 @@ Examples:
 > `resources/rooms/sanctuary_room.tres` (full heal + 1.5x gold) for a
 > working example; a "poison resistance, but weaker elsewhere" room is
 > the same fields with different numbers and hasn't been authored yet.
+
+> **Status (room cap):** implemented. `DungeonManager.max_rooms = 6` is
+> a hard ceiling — `DungeonGrid` locks every gap zone once at cap so no
+> drop is even accepted, and unlocks them again the moment a room is
+> sold.
 
 ---
 
@@ -320,8 +342,14 @@ Elite raids may contain:
 > together via `Dungeon.gd`, positioned in a class-based formation and
 > resolved as one shared encounter per room via
 > `CombatManager.begin_group_combat()` rather than each hero soloing the
-> dungeon independently. All five classes now have real kits — see
-> Combat System for the full breakdown.
+> dungeon independently. All five classes have real kits — Tank
+> (Shield Wall + Taunt), Healer (Heal + Chain Heal), Mage (Fireball +
+> Chain Lightning + Ice Spike), Ranger (Poison Arrow + Explosive Arrow),
+> Rogue (Poison Strike + Backstab) — with melee/ranged distinction,
+> per-monster threat/aggro tables, a Tank taunt hard-override, and an
+> opening beat where support abilities (heals/buffs/taunt) fire once
+> before the tick loop begins. Heroes still pick a random living enemy
+> to attack rather than any priority-based targeting — see Milestone 4.
 
 ---
 
@@ -339,6 +367,65 @@ Elite raids may contain:
 > mutated, since they're shared assets (see `Dungeon.send_wave()`).
 > Monsters and traps are **not** scaled by wave tier — only heroes get
 > stronger as the Dungeon Lord holds the line.
+>
+> **Victory condition:** `WaveManager.max_wave` (10) is a real win
+> condition, not just "tier 11." Fully wiping the party at tier 10
+> triggers `GameManager.start_victory()` — the run ends in VICTORY
+> rather than looping to another shop/wave, and all building/wave
+> controls lock permanently until a full reset.
+
+---
+
+### Post-Wave Shop System
+
+The shop opens automatically after every full-wipe wave clear (an
+escape sends the player straight back to Building to retry the same
+wave — no shop, since nothing was actually won).
+
+* **Room offers:** 3 random base-tier rooms per visit. Buying one
+  doesn't insert it directly — it grants a free placement credit,
+  redeemed by dragging a dynamically-created card onto the dungeon
+  (`ShopManager.consume_free_room`). Buying (or pack-winning) the same
+  room type twice stacks additional credits/cards rather than
+  overwriting anything.
+* **Passive offers:** 3 random permanent passives per visit (see
+  Passives below). Passives that have hit their stack cap are filtered
+  out of the offer pool entirely.
+* **Per-slot purchase limit:** each of the 6 offer slots (3 room + 3
+  passive) can only be bought once per visit — buying one room offer
+  does not block buying a different room or any passive.
+* **Reroll:** limited to once per visit. Reshuffles every slot except
+  whichever one currently holds the discount, and resets every slot's
+  bought status back to available.
+* **Discount:** one random slot (room or passive) each visit is
+  discounted (`discount_ratio`, currently 50%) and survives a reroll
+  unchanged.
+* **Card packs:** unlimited purchases at a flat cost, unaffected by
+  reroll or the per-slot limit. Each pack randomly rewards gold, a free
+  room credit, or a passive; a roll that can't be granted (empty pool,
+  or a maxed-out passive) refunds the pack's cost instead of wasting it.
+
+See `ShopManager.gd`.
+
+---
+
+### Passives
+
+Permanently-owned upgrades purchased in the shop, tracked for the
+whole run (reset only on a full reset, not between waves). Stacking is
+**additive**, not compounding — two +15% passives of the same effect
+type give +30%, not +32.25%. Some passives cap how many times they can
+ever be owned (`PassiveData.max_stacks`, 0 = unlimited).
+
+Currently authored (`resources/passives/`):
+
+* **Golden Touch** — gold multiplier
+* **Reinforced Minions** — monster health multiplier
+* **Sharpened Claws** — monster damage multiplier
+* **Venomous Traps** — trap damage multiplier
+* **Haggler** — flat reroll-cost discount (capped at 2 stacks)
+
+See `PassiveManager.gd` / `PassiveData.gd`.
 
 ---
 
@@ -384,288 +471,38 @@ Everything should be data-driven using Godot Resources.
 
 > **Status:** implemented. The `Resource` classes below all drive
 > gameplay, and content is now authored as real `.tres` files under
-> `resources/` — a 3-tier room upgrade chain, a trap room, a utility
-> room, and a full hero roster (Tank/Healer/Ranger/Mage/Rogue) — rather
-> than constructed in code. `TestHarness.gd` just wires those files in
-> via `@export` fields — adding a new monster, room, trap, ability, or
-> hero variant no longer requires touching any script. Enum-like fields
-> (`AbilityData.ability_type`/`target_rule`, `TrapData.trap_type`) are
-> centralized as real enums on `GameEnums` rather than each resource
-> declaring its own `@export_enum` string — `RoomData.room_type` and
-> `HeroData.class_type`/`CardData.rarity` are still their own
-> independent string enums and haven't been converted yet.
+> `resources/` — a 3-tier room upgrade chain, trap rooms, a utility
+> room, five passives, and a full hero roster (Tank/Healer/Ranger/Mage/
+> Rogue) — rather than constructed in code. `TestHarness.gd` just wires
+> those files in via `@export` fields — adding a new monster, room,
+> trap, ability, hero, or passive no longer requires touching any
+> script. Enum-like fields (`AbilityData.ability_type`/`target_rule`,
+> `TrapData.trap_type`, `PassiveData.effect_type`) are centralized as
+> real enums on `GameEnums` rather than each resource declaring its own
+> `@export_enum` string — `RoomData.room_type`, `HeroData.class_type`,
+> and `CardData.rarity` are still their own independent string enums
+> and haven't been converted yet.
 
 ---
 
-## 📂 PROJECT STRUCTURE
+## 🛡️ STABILITY: HERO LIFECYCLE SAFETY
 
-Reflects the structure as it exists today (not the original target layout):
+A recurring class of crash (`Invalid type in function — previously
+freed object`) was traced to `queue_free()` deferring deletion to
+end-of-frame — `is_instance_valid()` alone stays `true` within the same
+frame a hero is queued for deletion, so code reading a "dead" hero back
+out of `Dungeon._party` later in that frame could still crash passing
+it into a `CombatEntity`-typed slot.
 
-```
-res://
-
-scripts/
-	core/          # GameEnums, CombatEntity, CircleVisual, CombatProjectile, PanZoomCamera
-	dungeon/       # Dungeon, DungeonGrid
-	rooms/         # Room, RoomData, RoomCard, RoomGapZone, RoomUpgradeZone
-	heroes/        # HeroData
-	monsters/      # MonsterData
-	traps/         # TrapData, TrapArrow, PoisonArrowTrapController
-	abilities/     # AbilityData
-	bosses/        # BossData
-	biomes/        # BiomeData
-	cards/         # CardData
-	managers/      # GameManager, EconomyManager, WaveManager,
-				   # DungeonManager, CombatManager, HeroManager
-	test/          # TestHarness (manual playtest scene driver)
-
-resources/
-	rooms/         # skeleton_den (3 tiers), spike_corridor.tres,
-				   # poison_arrow_corridor.tres, sanctuary_room.tres
-	monsters/      # skeleton, elite_skeleton, skeleton_champion
-	traps/         # spike_trap.tres, poison_arrow_trap.tres
-	abilities/     # tank_shield_wall, tank_taunt, cleric_heal, cleric_chain_heal,
-				   # ranger_poison_arrow, ranger_explosive_arrow, mage_fireball,
-				   # mage_chain_lightning, mage_ice_spike, rogue_poison_strike,
-				   # rogue_backstab
-	heroes/        # test_adventurer, tank_knight, cleric_healer,
-				   # ranger_scout, battle_mage, shadow_rogue
-
-scenes/
-	dungeons/      # Dungeon.tscn, DungeonGrid.tscn
-	rooms/         # Room.tscn
-	traps/         # TrapArrow.tscn
-	effects/       # CombatProjectile.tscn
-	test/          # TestHarness.tscn, TestHeroEntity.tscn, TestMonsterEntity.tscn
-```
-
-`resources/` is now real, authored content covering a 3-tier room
-upgrade chain, a trap room, and a full hero roster (Tank/Healer/
-Ranger/Mage/Rogue). A dedicated `combat/` script folder from the
-original plan doesn't exist yet — combat logic still lives in
-`managers/CombatManager.gd` and `core/CombatEntity.gd`.
-
----
-
-## 🧩 CORE DATA OBJECTS
-
-All of the following are implemented as `Resource` subclasses.
-
-### RoomData
-
-```
-room_name : String
-cost : int
-room_type : String ("Empty" | "Monster" | "Trap" | "Boss" | "Utility")
-monster : MonsterData
-trap : TrapData
-health : int
-upgrade_path : RoomData
-icon : Texture2D
-rarity : String ("Common" | "Rare" | "Epic" | "Legendary")
-heal_party_on_entry : bool      # Utility rooms - full-heals the living party on arrival
-gold_multiplier : float         # Utility rooms - stacks multiplicatively, applies for rest of wave
-trap_damage_multiplier : float  # Utility rooms - same stacking, affects trap damage taken
-```
-
----
-
-### TrapData
-
-```
-trap_name : String
-damage : int                    # initial hit - both trap types
-trigger_chance : float          # INSTANT only - 0.0-1.0 chance the trap fires when entered
-ignores_armor : bool            # traps classically bypass armor entirely
-trap_type : GameEnums.TrapType ("Instant" | "Projectile")
-tick_damage : int                # Projectile only - damage-over-time per tick
-tick_count : int                 # Projectile only - number of DoT ticks
-tick_interval : float             # Projectile only - seconds between ticks
-projectile_speed : float          # Projectile only - arrow travel speed
-projectile_cooldown : float       # Projectile only - per-slot cooldown between shots
-max_concurrent_arrows : int        # Projectile only - independent firing "slots"
-abilities : Array[String]
-icon : Texture2D
-```
-
----
-
-### AbilityData
-
-```
-ability_name : String
-ability_type : GameEnums.AbilityType ("Attack" | "Heal" | "ChainHeal" | "Buff" | "Taunt" | "DotAttack" | "ChainAttack")
-target_rule : GameEnums.AbilityTargetRule ("LowestHpAlly" | "Self")   # only used by Heal/ChainHeal/Buff/Taunt
-cooldown : float
-magnitude : int        # damage/heal amount, or armor bonus for Buff
-duration : float        # buff/taunt duration; unused by instant effects
-chain_count : int       # ChainHeal/ChainAttack - extra targets hit/healed
-ignore_armor : bool     # Attack/DotAttack/ChainAttack - bypasses armor entirely
-tick_damage : int       # DotAttack only - damage-over-time per tick
-tick_count : int        # DotAttack only - number of DoT ticks
-tick_interval : float   # DotAttack only - seconds between ticks
-icon : Texture2D
-```
-
----
-
-### MonsterData
-
-```
-monster_name : String
-max_health : int
-damage : int
-armor : int
-attack_speed : float
-abilities : Array[AbilityData]
-sprite : Texture2D
-is_melee : bool               # charges into melee range vs. holds and fires a projectile
-projectile_color : Color      # tint for ranged attacks; unused if is_melee
-```
-
----
-
-### HeroData
-
-```
-hero_name : String
-max_health : int
-damage : int
-armor : int
-attack_speed : float
-abilities : Array[AbilityData]
-class_type : String ("Tank" | "Healer" | "Mage" | "Ranger" | "Rogue")
-priority : int
-sprite : Texture2D
-gold_value : int           # gold earned if 100% of effective max HP is dealt to this hero
-is_melee : bool             # charges into melee range vs. holds formation and fires a projectile
-projectile_color : Color    # tint for ranged attacks/heals; unused if is_melee
-```
-
----
-
-### BossData
-
-```
-boss_name : String
-max_health : int
-damage : int
-armor : int
-phases : int
-summons : Array[MonsterData]
-abilities : Array[String]
-sprite : Texture2D
-```
-
----
-
-### CardData
-
-```
-title : String
-description : String
-rarity : String ("Common" | "Rare" | "Epic" | "Legendary")
-icon : Texture2D
-effects : Array[String]
-```
-
----
-
-### BiomeData
-
-```
-biome_name : String
-background : Texture2D
-music : AudioStream
-room_pool : Array[RoomData]
-hero_pool : Array[HeroData]
-boss : BossData
-wave_count : int
-special_rules : Array[String]
-```
-
----
-
-## ⚔️ COMBAT SYSTEM
-
-Combat is fully automated: `CombatManager.begin_group_combat()` runs a
-tick-based simulation where every hero and monster in a room fight
-together as groups, not 1v1. Each combatant acts independently whenever
-their own ability cooldowns allow it - `attack_speed` now genuinely
-matters, since it sets the cooldown of the implicit basic attack.
-
-Each combatant has an `abilities` list (`AbilityData` resources) on top
-of an auto-generated basic attack. When multiple abilities are off
-cooldown at once, one is chosen **at random** among the ready ones - no
-priority order, no role logic.
-
-**Opening actions:** the instant a room fight begins, every living
-combatant gets one immediate chance to fire a ready support ability
-(Buff/Taunt/Heal/ChainHeal) before the normal random-tick loop takes
-over - this is the "party stops in formation and applies buffs, then
-the fight begins" beat, rather than leaving a Tank's Taunt or a
-Healer's Heal to a random dice roll sometime mid-fight.
-
-**Melee vs. ranged:** every hero/monster is flagged `is_melee`. The
-instant a fight begins, melee combatants (Tank, Rogue, and all current
-monsters) visually charge partway toward the opposing line; ranged
-combatants (Healer, Mage, Ranger) hold their formation position and
-fire a small tinted `CombatProjectile` at their target instead of
-lunging. Both are purely cosmetic - `CombatManager`'s targeting/damage
-never reads position, and survivors are smoothly tweened back into
-formation once the room is resolved.
-
-**Aggro:** monsters target using a per-monster threat table (whoever has
-dealt that monster the most cumulative damage, including DoT ticks and
-chain-attack splash). **Taunt is a hard override** on top of that -
-while active, every monster's targeting is forced onto the taunting
-hero(es), completely ignoring threat, for the ability's duration.
-
-**Formation:** party members are positioned by `class_type` rather than
-spawn order - Tank at the front, Ranger/Mage in the middle, Healer at
-the back, Rogue past the monster line entirely.
-
-**Visual feedback:** heroes/monsters render as small filled circles
-(`CircleVisual`); melee attacks lunge the attacker toward their target
-and back, ranged attacks/heals fire a projectile instead; overlapping
-combatants gently push apart (`SeparationArea`); a taunting entity
-turns blood red for the taunt's duration; a healed entity flashes green
-for 0.5s. Heroes spawn at the entrance one at a time with a small
-random stagger rather than all at once, and room-to-room movement (plus
-the melee charge-in) eases in/out rather than moving at constant linear
-speed.
-
-The player's decisions happen between battles through:
-
-* Room placement
-* Upgrades
-* Cards
-* Economy management
-
-The focus is strategy rather than micro-management.
-
-> **Implemented kits (all five classes):**
-> * **Tank** — `Shield Wall` (self-buff armor), `Taunt` (hard-override aggro)
-> * **Healer** — `Heal` (lowest-HP ally), `Chain Heal` (splashes to 2 more allies at reduced effectiveness)
-> * **Mage** — `Fireball` (big single hit), `Chain Lightning` (primary + 2 additional random enemies), `Ice Spike` (another single-target bolt)
-> * **Ranger** — `Poison Arrow` (initial hit + DoT, ignores armor), `Explosive Arrow` (big armor-ignoring hit)
-> * **Rogue** — `Poison Strike` (initial hit + DoT, ignores armor), `Backstab` (big armor-ignoring hit)
->
-> **Known simplification:** hero-side Attack-type targeting (basic
-> attacks and any Attack/DotAttack/ChainAttack hero ability) is a
-> random living monster - there's no hero-side targeting AI yet (e.g. a
-> Rogue preferring an untaunted target for a bonus, or Chain Lightning
-> preferring clustered targets over random ones).
->
-> **Known simplification:** DoT ticks and Chain Attack's extra hits
-> don't get their own log line per tick/target beyond the opening hit -
-> kept quiet deliberately so a multi-tick poison doesn't spam the event
-> log.
->
-> **Known simplification:** projectiles are cosmetic-after-the-fact -
-> damage applies instantly and the projectile is spawned as a visual
-> flourish, not a delay before the hit registers (same simplification
-> the melee lunge already made).
+**Fix:** a combined `_is_alive()` helper (`is_instance_valid()` +
+`not is_queued_for_deletion()`) now guards every read of a
+possibly-freed hero/monster reference across call boundaries —
+`Dungeon.gd`'s movement, trap resolution, death/escape handling, and
+`CombatManager`'s taunt tracking and living-group checks all route
+through it (or the untyped-Variant equivalent) rather than checking
+`is_instance_valid()` alone. `HeroManager.remove_hero()` only updates
+tracking and never calls `queue_free()` itself, so it's safe to call
+even on an already-freed entry.
 
 ---
 
@@ -673,7 +510,7 @@ The focus is strategy rather than micro-management.
 
 What's actually playable today, via `scenes/test/TestHarness.tscn`:
 
-* ✅ Linear dungeon path (entrance → rooms → exit) rendered by `DungeonGrid`
+* ✅ Linear dungeon path (entrance → rooms → exit) rendered by `DungeonGrid`, capped at 6 rooms with gap-zone locking at the cap
 * ✅ Drag a `RoomCard` from the palette into a `RoomGapZone` to build a room (spends gold)
 * ✅ Drag a matching card onto a room's upgrade prompt to upgrade it (spends the cost delta); upgrade chains of 3+ tiers work correctly, matched by exact resource rather than by room name
 * ✅ Click a room to select it and reveal a Sell button (refunds half cost)
@@ -683,32 +520,30 @@ What's actually playable today, via `scenes/test/TestHarness.tscn`:
 * ✅ Party moves at a reduced speed approaching any room with a monster or trap (`Dungeon.room_danger_speed_multiplier`), giving projectile traps more exposure time to land hits
 * ✅ Multi-hero parties (Tank/Healer/Ranger/Mage, plus a random 4th class) move and fight together as a real group via `Dungeon.send_wave()` + `CombatManager.begin_group_combat()` — not solo runs anymore
 * ✅ Heroes spawn at the entrance one at a time with a small random stagger, rather than all appearing at once
-* ✅ Class-based formation (Tank front, Ranger/Mage mid, Healer back, Rogue flanking past the monster line)
+* ✅ Class-based formation (Tank front, Ranger/Mage mid, Healer back, Rogue flanking past the monster line) with a melee-charge visual beat at combat start
 * ✅ Monsters spawn visibly in their room up front (not lazily on arrival) and stay put until fought or the wave ends
-* ✅ Melee vs. ranged distinction: melee combatants (Tank, Rogue, all current monsters) visually charge partway toward the opposing line when a fight begins; ranged combatants (Healer, Mage, Ranger) hold formation and fire a projectile instead — purely cosmetic, doesn't affect targeting/damage
-* ✅ Opening-actions beat: every combatant gets one immediate chance to fire a ready support ability (Buff/Taunt/Heal/ChainHeal) the instant a fight starts, instead of waiting on a random tick roll
-* ✅ Aggro via a per-monster threat table (highest cumulative damage dealt, including DoT ticks and chain-attack splash); Tank `Taunt` is a hard override that forces monster targeting onto the taunting hero for its duration, and is correctly cleared the instant its owner dies rather than only on timeout
-* ✅ Ability/cooldown system (`AbilityData`) with all five class kits implemented — Tank (Shield Wall, Taunt), Healer (Heal, Chain Heal), Mage (Fireball, Chain Lightning, Ice Spike), Ranger (Poison Arrow, Explosive Arrow), Rogue (Poison Strike, Backstab) — each combatant picks randomly among whichever abilities are off cooldown
-* ✅ Two additional ability types beyond plain Attack: `DotAttack` (initial hit + ticking damage, e.g. poison) and `ChainAttack` (primary target + N additional random enemies at reduced damage, e.g. Chain Lightning)
-* ✅ Heroes/monsters render as small filled circles (`CircleVisual`, 20% smaller than the original placeholder squares) instead of squares
-* ✅ Visual combat feedback: melee attack lunge toward target and back, ranged attacks/heals fire a tinted `CombatProjectile`, overlap-based separation push between combatants, taunting entities turn red, healed entities flash green
-* ✅ Room-to-room movement and the melee charge-in both ease in/out (`TRANS_SINE`/`EASE_IN_OUT`) rather than moving at constant linear speed
-* ✅ Ability usage narrates itself into the event log (`CombatManager.ability_used`) — every attack, heal, buff, and taunt (plus taunt expiry) is a readable log line, which is also how a mismatched `.tres` enum value was caught and fixed during testing
-* ✅ Wave difficulty is outcome-driven, not a manual counter: `WaveManager`'s tier only advances on a full party wipe; escaping heroes send the same-strength party again. The stat multiplier scales **linearly** per tier (1.0x, 1.1x, 1.2x, ...) and applies to a spawned hero's health/damage/armor/attack-speed *and* gold value together, so the gold-per-damage rate stays constant as waves get tougher. Monsters and traps are not scaled by tier
+* ✅ Tick-based group combat with per-monster threat/aggro tables, ability cooldowns, a Tank taunt hard-override, and an opening beat where support abilities (heal/buff/taunt) fire once before the tick loop starts
+* ✅ Full class kits for all five hero classes, including melee/ranged distinction and projectile visuals
+* ✅ Outcome-driven wave tiers: only a full wipe advances the tier (linear stat + gold scaling per tier survived); an escape retries the same-strength wave
+* ✅ **10-wave victory condition:** fully wiping tier 10 triggers a real run-level VICTORY state (`GameManager.start_victory()`), locking all controls — not just an infinite tier counter
+* ✅ **Post-wave shop:** opens on every full-wipe clear — 3 room + 3 passive offers (each slot buyable once per visit), a once-per-visit reroll, unlimited card packs, and a per-visit discounted slot; purchased rooms are placed via free-credit cards rather than direct insertion
+* ✅ **Passives:** 5 authored passives (gold/monster-damage/monster-health/trap-damage multipliers, reroll discount), additive stacking, with per-passive stack caps enforced at purchase time
+* ✅ **Hero lifecycle safety:** the freed-object crash class is resolved via `_is_alive()` guards at every call boundary that reads a hero/monster reference after `begin_combat`/movement/trap resolution — see Stability section above
 * ✅ Gold economy, wave counter, and a scrolling event log
 * ✅ Pan (WASD/arrows or middle-mouse drag) and zoom (mouse wheel) camera
-* ✅ `GameManager` gates building actions by phase (insert/upgrade/sell only succeed during BUILDING, enforced in `DungeonGrid`); "Send Wave" transitions to COMBAT, `Dungeon.wave_cleared` transitions to REWARD, which currently loops straight back to BUILDING (no card draft yet)
+* ✅ `GameManager` gates building actions by phase (insert/upgrade/sell only succeed during BUILDING, enforced in `DungeonGrid`); "Send Wave" transitions to COMBAT, a full wipe transitions to REWARD (opening the shop) or VICTORY at tier 10, an escape returns to BUILDING to retry
 * ✅ `HeroManager.spawn_hero`/`remove_hero`/`active_heroes` backs `Dungeon.gd`'s hero tracking directly — no more private hero counter
-* ✅ Room/monster/trap/ability/hero content authored as real `.tres` resources under `resources/`, wired into `TestHarness` via `@export` fields
-* ✅ Gold is earned per-hero based on damage taken vs. effective max health, plus a full-wipe bonus — not from winning fights or clearing rooms (see `EconomyManager.gd`)
-* ✅ Enum-like data (`AbilityData.ability_type`/`target_rule`, `TrapData.trap_type`) centralized on `GameEnums` rather than duplicated as independent `@export_enum` strings per resource
+* ✅ Room/monster/trap/ability/hero/passive content authored as real `.tres` resources under `resources/`, wired into `TestHarness` via `@export` fields
+* ✅ Gold is earned per-hero based on damage taken vs. effective max health, plus a full-wipe bonus and a passive gold multiplier layered on top — not from winning fights or clearing rooms (see `EconomyManager.gd`)
+* ✅ Enum-like data (`AbilityData.ability_type`/`target_rule`, `TrapData.trap_type`, `PassiveData.effect_type`) centralized on `GameEnums` rather than duplicated as independent `@export_enum` strings per resource
 
 Notably **not yet wired up**, despite the underlying scripts existing:
 
-* ⬜ No reward-phase content yet — `_on_reward_phase_started` immediately loops back to building since there's no card draft system
+* ⬜ No card draft system — the post-wave shop currently fills this role instead; `CardData.rarity` exists but is unused
 * ⬜ `BossData` has no room encounter, phase, or summon logic
-* ⬜ `RoomData.room_type`, `HeroData.class_type`, and `CardData.rarity` are still independent `@export_enum` strings, not yet centralized on `GameEnums` like `AbilityData`/`TrapData` were
+* ⬜ `RoomData.room_type`, `HeroData.class_type`, and `CardData.rarity` are still independent `@export_enum` strings, not yet centralized on `GameEnums` like `AbilityData`/`TrapData`/`PassiveData` were
 * ⬜ No hero-side targeting AI — heroes (and their abilities) still pick a random living enemy rather than anything priority-based
+* ⬜ No economy/gold-cost tuning pass yet — numbers are functional placeholders, not balanced
 
 > **Architecture note:** the original plan called this a "Dungeon Grid,"
 > but what's implemented is a **linear ordered path** (`DungeonManager`
@@ -736,14 +571,14 @@ Players should constantly think:
 
 # 🔥 DEVELOPMENT PRIORITY
 
-1. ✅ Dungeon Grid *(implemented as a linear path)*
+1. ✅ Dungeon Grid *(implemented as a linear path, capped at 6 rooms)*
 2. ✅ Placeable Rooms
 3. ✅ Hero Movement
 4. ✅ Basic Combat
 5. ✅ Gold Economy
 6. ✅ Room Upgrades
-7. ✅ Wave System *(outcome-driven tier: only advances on a full wipe; linear stat + gold scaling per tier — see Wave Progression)*
-8. ⬜ Card Drafting
+7. ✅ Wave System *(outcome-driven tier: only advances on a full wipe; linear stat + gold scaling per tier; 10-wave victory condition — see Wave Progression)*
+8. 🟡 Card Drafting *(post-wave shop with rooms/passives/packs substitutes for this today; the actual draft system is still Milestone 3)*
 9. 🟡 Hero Parties *(parties move and fight together with class formation, aggro/taunt, melee-vs-ranged, and all five class kits implemented; still no hero-side targeting AI — see Milestone 4)*
 10. ⬜ Boss Room
 11. ⬜ Biomes
@@ -771,7 +606,7 @@ Create a complete playable dungeon loop.
 * ✅ Hero movement
 * ✅ Basic combat
 * ✅ Hero death
-* ✅ Victory/Defeat *(escape vs. death; no run-level game-over yet)*
+* ✅ Victory/Defeat *(escape vs. death per wave, plus a real run-level VICTORY at wave 10)*
 * ✅ Gold rewards
 
 ### Success Criteria
@@ -793,16 +628,16 @@ Expand the player's choices.
 
 * ✅ Multiple room types *(Trap rooms — both INSTANT and PROJECTILE/DoT variants — and Utility rooms are all implemented; see `TrapData`/`spike_corridor.tres`/`poison_arrow_corridor.tres` and `sanctuary_room.tres`)*
 * ✅ Room upgrades *(multi-tier chains work end-to-end — validated with a 3-tier Skeleton Den; `RoomUpgradeZone` now matches the exact upgrade resource rather than by room name, fixing a bug that would've misfired once a room had 2+ upgrade tiers)*
-* 🟡 Economy balancing *(the original blocker is gone — all five classes now have real kits — but the actual gold/cost number-tuning pass itself hasn't happened yet; carrying forward rather than blocking the milestone on it)*
-* ✅ Dungeon expansion (insert/remove rooms mid-run)
-* ✅ Multiple waves *(outcome-driven tier progression with linear stat/gold scaling — see Wave Progression; no per-wave CONTENT variation yet, e.g. new room/monster pools unlocking at higher tiers)*
+* 🟡 Economy balancing *(all five classes have real kits, a post-wave shop, and 5 passives now exist, giving the economy real levers to pull — but the actual gold/cost number-tuning pass itself still hasn't happened; carrying forward rather than blocking the milestone on it)*
+* ✅ Dungeon expansion (insert/remove rooms mid-run, capped at 6 rooms)
+* ✅ Multiple waves *(outcome-driven tier progression with linear stat/gold scaling, plus a 10-wave victory condition — see Wave Progression; no per-wave CONTENT variation yet, e.g. new room/monster pools unlocking at higher tiers)*
 
 ### Success Criteria
 
 * 🟡 Every wave offers meaningful spending decisions
 * 🟡 Different room combinations become viable
 
-*(Called complete per project decision — there's now genuine room/trap/utility variety, full class kits with distinct melee/ranged behavior, and outcome-driven difficulty scaling, which together clear the original bar for this milestone. Both success criteria are marked 🟡 rather than ✅ in the spirit of staying honest: there are a handful of room types, not yet the deep build variety the vision calls for, and the economy still hasn't had a real tuning pass. That deeper variety is explicitly Milestone 3 (cards) and further room content territory.)*
+*(Called complete per project decision — there's now genuine room/trap/utility variety, full class kits with distinct melee/ranged behavior, outcome-driven difficulty scaling, and a post-wave shop with passives, which together clear the original bar for this milestone. Both success criteria are marked 🟡 rather than ✅ in the spirit of staying honest: there are a handful of room types, not yet the deep build variety the vision calls for, and the economy still hasn't had a real tuning pass. That deeper variety is explicitly Milestone 3 (cards) and further room content territory.)*
 
 ---
 
@@ -818,7 +653,7 @@ Introduce build variety.
 * ⬜ Draft system
 * ⬜ Card rarities *(`CardData.rarity` exists, unused in gameplay)*
 * ⬜ Synergies
-* ⬜ Card packs
+* ⬜ Card packs *(a shop "card pack" already exists as a gold/room/passive lucky-dip — see Post-Wave Shop System — but it isn't a drafted-card pack in the originally designed sense)*
 
 ### Success Criteria
 
