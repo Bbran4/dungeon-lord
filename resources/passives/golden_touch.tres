@@ -1,0 +1,10 @@
+[gd_resource type="Resource" script_class="PassiveData" format=3 uid="uid://dfubf54w4hrin"]
+
+[ext_resource type="Script" uid="uid://bknm672sb31js" path="res://scripts/passives/PassiveData.gd" id="1_xv8ry"]
+
+[resource]
+script = ExtResource("1_xv8ry")
+passive_name = "Golden Touch"
+description = "+15% gold from all sources"
+cost = 40
+metadata/_custom_type_script = "uid://bknm672sb31js"

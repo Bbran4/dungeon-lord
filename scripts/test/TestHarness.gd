@@ -40,6 +40,21 @@ class_name TestHarness
 @onready var next_wave_button: Button = $CanvasLayer/UI/VBox/Buttons2/NextWaveButton
 @onready var poison_arrow_card: RoomCard = $CanvasLayer/UI/VBox/Palette/PoisonArrowCard
 @onready var sanctuary_card: RoomCard = $CanvasLayer/UI/VBox/Palette/SanctuaryCard
+@onready var pending_room_card: RoomCard = $CanvasLayer/UI/VBox/Palette/PendingRoomCard
+@onready var shop_panel: Panel = $CanvasLayer/UI/ShopPanel
+@onready var shop_room_buttons: Array[Button] = [
+	$CanvasLayer/UI/ShopPanel/VBox/RoomButtons/RoomButton0,
+	$CanvasLayer/UI/ShopPanel/VBox/RoomButtons/RoomButton1,
+	$CanvasLayer/UI/ShopPanel/VBox/RoomButtons/RoomButton2,
+]
+@onready var shop_passive_buttons: Array[Button] = [
+	$CanvasLayer/UI/ShopPanel/VBox/PassiveButtons/PassiveButton0,
+	$CanvasLayer/UI/ShopPanel/VBox/PassiveButtons/PassiveButton1,
+	$CanvasLayer/UI/ShopPanel/VBox/PassiveButtons/PassiveButton2,
+]
+@onready var shop_pack_button: Button = $CanvasLayer/UI/ShopPanel/VBox/ExtrasButtons/PackButton
+@onready var shop_reroll_button: Button = $CanvasLayer/UI/ShopPanel/VBox/ExtrasButtons/RerollButton
+@onready var shop_continue_button: Button = $CanvasLayer/UI/ShopPanel/VBox/ContinueButton
 
 ## Authored content - assign these in the Inspector (or via the scene
 ## file) to point at .tres resources under res://resources/.
@@ -56,7 +71,7 @@ class_name TestHarness
 @export var ranger_hero_data: HeroData
 @export var mage_hero_data: HeroData
 @export var rogue_hero_data: HeroData
-
+var _pending_room_data: RoomData = null
 
 func _ready() -> void:
 	_connect_signals()
@@ -90,13 +105,34 @@ func _connect_signals() -> void:
 	spike_card.drag_started.connect(_on_card_drag_started)
 	spike_card.drag_ended.connect(_on_card_drag_ended)
 
+	pending_room_card.drag_ended.connect(_on_pending_room_drag_ended)
 
+	ShopManager.shop_opened.connect(_on_shop_opened)
+	ShopManager.shop_closed.connect(_on_shop_closed)
+	ShopManager.offers_refreshed.connect(_refresh_shop_ui)
+	ShopManager.room_purchased.connect(_on_room_purchased)
+	ShopManager.passive_purchased.connect(_on_passive_purchased)
+	ShopManager.pack_opened.connect(_on_pack_opened)
+
+	for i: int in shop_room_buttons.size():
+		shop_room_buttons[i].pressed.connect(_on_buy_room_pressed.bind(i))
+	for i: int in shop_passive_buttons.size():
+		shop_passive_buttons[i].pressed.connect(_on_buy_passive_pressed.bind(i))
+
+	shop_pack_button.pressed.connect(_on_buy_pack_pressed)
+	shop_reroll_button.pressed.connect(_on_reroll_pressed)
+	shop_continue_button.pressed.connect(_on_shop_continue_pressed)
+	
 func _reset_test() -> void:
 	log_text.clear()
 	EconomyManager.reset()
+	PassiveManager.reset()
+	pending_room_card.visible = false
+	_pending_room_data = null
+	shop_panel.visible = false
 	WaveManager.reset()
 	DungeonManager.generate_dungeon()
-
+	
 	skeleton_card.set_room_data(skeleton_room_data)
 	skeleton_upgraded_card.set_room_data(skeleton_room_upgraded_data)
 	skeleton_elite_card.set_room_data(skeleton_room_elite_data)
@@ -192,9 +228,10 @@ func _on_hero_escaped(hero: CombatEntity) -> void:
 
 
 ## full_wipe comes straight from Dungeon.wave_cleared - true only if
-## every hero in the wave died with none escaping. This is what decides
-## whether WaveManager advances the difficulty tier - and, if that
-## advance lands on WaveManager.max_wave, whether the run is WON.
+## every hero in the wave died with none escaping. A full wipe both
+## advances WaveManager's tier AND is what opens the shop; an escape
+## sends the player straight back to Building to retry the same wave -
+## no shop, since nothing was actually won.
 func _on_wave_cleared(full_wipe: bool) -> void:
 
 	if full_wipe:
@@ -208,8 +245,11 @@ func _on_wave_cleared(full_wipe: bool) -> void:
 		GameManager.start_victory()
 		return
 
-	GameManager.start_reward_phase()
-
+	if full_wipe:
+		GameManager.start_reward_phase()
+	else:
+		GameManager.start_building_phase()
+		
 ## Terminal - nothing re-enables these controls except a full reset.
 func _on_victory_started() -> void:
 	phase_label.text = "Phase: VICTORY"
@@ -259,7 +299,7 @@ func _on_building_phase_started() -> void:
 	phase_label.text = "Phase: Building"
 	send_wave_button.disabled = false
 	next_wave_button.disabled = false
-	for card: RoomCard in [skeleton_card, skeleton_upgraded_card, skeleton_elite_card, spike_card, poison_arrow_card, sanctuary_card]:
+	for card: RoomCard in [skeleton_card, skeleton_upgraded_card, skeleton_elite_card, spike_card, poison_arrow_card, sanctuary_card, pending_room_card]:
 		card.disabled = false
 		card.mouse_filter = Control.MOUSE_FILTER_STOP
 
@@ -268,15 +308,15 @@ func _on_combat_phase_started() -> void:
 	phase_label.text = "Phase: Combat"
 	send_wave_button.disabled = true
 	next_wave_button.disabled = true
-	for card: RoomCard in [skeleton_card, skeleton_upgraded_card, skeleton_elite_card, spike_card, poison_arrow_card, sanctuary_card]:
+	for card: RoomCard in [skeleton_card, skeleton_upgraded_card, skeleton_elite_card, spike_card, poison_arrow_card, sanctuary_card, pending_room_card]:
 		card.disabled = true
 		card.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 
 func _on_reward_phase_started() -> void:
 	phase_label.text = "Phase: Reward"
-	_log("Reward phase. (No card draft yet - looping back to building.)")
-	GameManager.start_building_phase()
+	_log("Wave cleared! Opening the shop...")
+	ShopManager.open_shop()
 
 
 func _on_trap_triggered(hero: CombatEntity, trap_data: TrapData) -> void:
@@ -286,6 +326,113 @@ func _on_trap_triggered(hero: CombatEntity, trap_data: TrapData) -> void:
 func _on_ability_used(message: String) -> void:
 	_log(message)
 
+func _on_shop_opened() -> void:
+	shop_panel.visible = true
+	_refresh_shop_ui()
+
+
+func _on_shop_closed() -> void:
+	shop_panel.visible = false
+
+
+func _refresh_shop_ui() -> void:
+
+	for i: int in shop_room_buttons.size():
+		var room_data: RoomData = ShopManager.room_offers[i]
+		var price: int = ShopManager.get_price("room", i)
+		var sale: String = " ★SALE★" if ShopManager.discount_category == "room" and ShopManager.discount_index == i else ""
+		shop_room_buttons[i].text = "%s\n%dg%s" % [room_data.room_name, price, sale]
+		shop_room_buttons[i].disabled = ShopManager.room_bought
+
+	for i: int in shop_passive_buttons.size():
+		var passive_data: PassiveData = ShopManager.passive_offers[i]
+		var price: int = ShopManager.get_price("passive", i)
+		var sale: String = " ★SALE★" if ShopManager.discount_category == "passive" and ShopManager.discount_index == i else ""
+		shop_passive_buttons[i].text = "%s\n%dg%s" % [passive_data.passive_name, price, sale]
+		shop_passive_buttons[i].disabled = ShopManager.passive_bought
+
+	shop_pack_button.text = "Card Pack (%dg)" % ShopManager.pack_cost
+	shop_reroll_button.text = "Reroll (%dg)" % ShopManager.get_reroll_cost()
+
+
+func _on_buy_room_pressed(index: int) -> void:
+
+	if _pending_room_data != null:
+		_log("Place your current room before buying another.")
+		return
+
+	if not ShopManager.buy_room(index):
+		_log("Can't buy that room right now.")
+		return
+
+	_refresh_shop_ui()
+
+
+func _on_buy_passive_pressed(index: int) -> void:
+
+	if not ShopManager.buy_passive(index):
+		_log("Can't buy that passive right now.")
+		return
+
+	_refresh_shop_ui()
+
+
+func _on_buy_pack_pressed() -> void:
+	if not ShopManager.buy_pack():
+		_log("Not enough gold for a card pack.")
+
+
+func _on_reroll_pressed() -> void:
+	if not ShopManager.reroll():
+		_log("Not enough gold to reroll.")
+
+
+func _on_shop_continue_pressed() -> void:
+	ShopManager.close_shop()
+	GameManager.start_building_phase()
+
+
+## Fires for both a shop purchase AND a card pack's free-room reward -
+## either way the player needs to place it. Overwrites any still-
+## unplaced previous purchase (see _on_buy_room_pressed's guard, which
+## prevents this in the normal shop-buy path; a pack's free room can
+## still hit this if the guard wasn't checked there, so this stays
+## defensive).
+func _on_room_purchased(room_data: RoomData) -> void:
+
+	if _pending_room_data != null:
+		_log("(Previous unplaced purchase was replaced.)")
+
+	_pending_room_data = room_data
+	pending_room_card.set_room_data(room_data)
+	pending_room_card.visible = true
+	pending_room_card.disabled = false
+	_log("Got %s! Drag it into the dungeon to place it." % room_data.room_name)
+
+
+func _on_passive_purchased(passive_data: PassiveData) -> void:
+	_log("Purchased passive: %s" % passive_data.passive_name)
+
+
+func _on_pack_opened(description: String) -> void:
+	_log(description)
+	_refresh_shop_ui()
+
+
+## Detects successful placement by checking whether the pending room
+## now appears anywhere in the dungeon (Control's own drop handling
+## already ran by the time NOTIFICATION_DRAG_END reaches this card).
+func _on_pending_room_drag_ended() -> void:
+
+	if _pending_room_data == null:
+		return
+
+	for i: int in DungeonManager.room_count():
+		if DungeonManager.get_room(i) == _pending_room_data:
+			pending_room_card.visible = false
+			_pending_room_data = null
+			_log("Room placed!")
+			return
 
 func _log(message: String) -> void:
 	log_text.append_text(message + "\n")

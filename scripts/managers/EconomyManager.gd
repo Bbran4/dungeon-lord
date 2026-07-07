@@ -45,17 +45,11 @@ func can_afford(amount: int) -> bool:
 
 ## Awards gold for the damage a single hero took over a run, scaled
 ## against their effective max health (base max health plus any healing
-## received). Killing a hero outright earns their full gold_value; a
-## hero that escapes with some damage taken still earns partial credit.
-## Damage dealt BY heroes (killing monsters, clearing rooms) never earns
-## gold - only damage TAKEN by heroes does.
-##
-## gold_value is passed in directly (rather than read off HeroData)
-## because the CALLER is responsible for scaling it by
-## WaveManager.current_stat_multiplier() first - the same multiplier
-## applied to the hero's stats - so the gold-per-damage-point rate stays
-## constant as waves get tougher, instead of silently degrading as
-## max_health scales up but gold_value doesn't.
+## received). gold_value is passed in already scaled by the wave's
+## stat multiplier (see Dungeon.send_wave()) - PassiveManager's gold
+## multiplier is applied on top of that here, as a separate multiplicative
+## layer representing the Dungeon Lord's overall income, uniformly
+## across every gold source.
 func award_hero_damage_gold(hero: CombatEntity, gold_value: int) -> void:
 
 	var effective_max: int = hero.effective_max_health()
@@ -64,7 +58,7 @@ func award_hero_damage_gold(hero: CombatEntity, gold_value: int) -> void:
 		return
 
 	var ratio: float = clampf(float(hero.damage_taken) / float(effective_max), 0.0, 1.0)
-	var earned: int = int(round(gold_value * ratio))
+	var earned: int = int(round(gold_value * ratio * PassiveManager.get_gold_multiplier()))
 
 	if earned > 0:
 		add_gold(earned)
@@ -72,11 +66,10 @@ func award_hero_damage_gold(hero: CombatEntity, gold_value: int) -> void:
 
 ## Awards a bonus when an entire hero party is wiped out with no
 ## survivors, scaled off the party's combined (already-scaled)
-## gold_value total - see award_hero_damage_gold for why the caller
-## passes an already-scaled total rather than raw HeroData.
+## gold_value total, plus PassiveManager's gold multiplier.
 func award_wipe_bonus(total_gold_value: int) -> void:
 
-	var bonus: int = int(round(total_gold_value * full_wipe_bonus_ratio))
+	var bonus: int = int(round(total_gold_value * full_wipe_bonus_ratio * PassiveManager.get_gold_multiplier()))
 
 	if bonus > 0:
 		add_gold(bonus)

@@ -23,6 +23,8 @@ DungeonManager="*uid://cvdw4u15kj835"
 EconomyManager="*uid://d1e3g5ep6tful"
 HeroManager="*uid://ddqslnjbvtl03"
 WaveManager="*uid://c5oi4guafvnku"
+PassiveManager="*uid://dctiwctrebkwm"
+ShopManager="*uid://c8ufrft25f663"
 
 [display]
 

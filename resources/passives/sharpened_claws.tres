@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="PassiveData" format=3 uid="uid://hnnt2sr04gg8"]
+
+[ext_resource type="Script" uid="uid://bknm672sb31js" path="res://scripts/passives/PassiveData.gd" id="1_wkijd"]
+
+[resource]
+script = ExtResource("1_wkijd")
+passive_name = "Sharpened Claws"
+description = "+15% monster damage"
+cost = 35
+effect_type = 2
+metadata/_custom_type_script = "uid://bknm672sb31js"

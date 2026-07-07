@@ -168,7 +168,7 @@ func send_wave(hero_data_list: Array[HeroData]) -> void:
 	_heroes_escaped_count = 0
 	_heroes_died_count = 0
 	_gold_multiplier = 1.0
-	_trap_damage_multiplier = 1.0
+	_trap_damage_multiplier = PassiveManager.get_trap_damage_multiplier()
 	_party.clear()
 
 	_spawn_all_room_monsters()
@@ -427,7 +427,11 @@ func _spawn_monster_group(room_data: RoomData, at_position: Vector2) -> Array[Co
 		monster.name = "Monster_%s_%d" % [room_data.monster.monster_name, i + 1]
 
 		add_child(monster)
-		monster.configure(room_data.monster.max_health, room_data.monster.damage, room_data.monster.armor, room_data.monster.attack_speed, room_data.monster.abilities)
+
+		var scaled_monster_health: int = int(round(room_data.monster.max_health * PassiveManager.get_monster_health_multiplier()))
+		var scaled_monster_damage: int = int(round(room_data.monster.damage * PassiveManager.get_monster_damage_multiplier()))
+
+		monster.configure(scaled_monster_health, scaled_monster_damage, room_data.monster.armor, room_data.monster.attack_speed, room_data.monster.abilities)
 		monster.is_melee = room_data.monster.is_melee
 		monster.projectile_color = room_data.monster.projectile_color
 		monster.position = at_position + Vector2(0, (i - (count - 1) / 2.0) * 40.0)

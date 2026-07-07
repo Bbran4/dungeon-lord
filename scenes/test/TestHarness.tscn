@@ -115,6 +115,12 @@ text = "Sanctuary
 60g"
 script = ExtResource("3")
 
+[node name="PendingRoomCard" type="Button" parent="CanvasLayer/UI/VBox/Palette" unique_id=1996174929]
+visible = false
+custom_minimum_size = Vector2(120, 60)
+layout_mode = 2
+script = ExtResource("3")
+
 [node name="Buttons" type="HBoxContainer" parent="CanvasLayer/UI/VBox" unique_id=1412035313]
 layout_mode = 2
 mouse_filter = 2
@@ -146,6 +152,77 @@ size_flags_horizontal = 8
 size_flags_vertical = 0
 mouse_filter = 2
 scroll_following = true
+
+[node name="ShopPanel" type="Panel" parent="CanvasLayer/UI" unique_id=288988928]
+visible = false
+layout_mode = 0
+offset_left = 440.0
+offset_top = 20.0
+offset_right = 780.0
+offset_bottom = 560.0
+
+[node name="VBox" type="VBoxContainer" parent="CanvasLayer/UI/ShopPanel" unique_id=178089822]
+layout_mode = 0
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+
+[node name="Title" type="Label" parent="CanvasLayer/UI/ShopPanel/VBox" unique_id=1109611812]
+layout_mode = 2
+text = "🏪 Shop"
+
+[node name="RoomsLabel" type="Label" parent="CanvasLayer/UI/ShopPanel/VBox" unique_id=1909601572]
+layout_mode = 2
+text = "Rooms (pick 1):"
+
+[node name="RoomButtons" type="HBoxContainer" parent="CanvasLayer/UI/ShopPanel/VBox" unique_id=365482688]
+layout_mode = 2
+
+[node name="RoomButton0" type="Button" parent="CanvasLayer/UI/ShopPanel/VBox/RoomButtons" unique_id=2003327739]
+custom_minimum_size = Vector2(100, 50)
+layout_mode = 2
+
+[node name="RoomButton1" type="Button" parent="CanvasLayer/UI/ShopPanel/VBox/RoomButtons" unique_id=78696041]
+custom_minimum_size = Vector2(100, 50)
+layout_mode = 2
+
+[node name="RoomButton2" type="Button" parent="CanvasLayer/UI/ShopPanel/VBox/RoomButtons" unique_id=1198598430]
+custom_minimum_size = Vector2(100, 50)
+layout_mode = 2
+
+[node name="PassivesLabel" type="Label" parent="CanvasLayer/UI/ShopPanel/VBox" unique_id=1113545166]
+layout_mode = 2
+text = "Passives (pick 1):"
+
+[node name="PassiveButtons" type="HBoxContainer" parent="CanvasLayer/UI/ShopPanel/VBox" unique_id=106099869]
+layout_mode = 2
+
+[node name="PassiveButton0" type="Button" parent="CanvasLayer/UI/ShopPanel/VBox/PassiveButtons" unique_id=1014795254]
+custom_minimum_size = Vector2(100, 50)
+layout_mode = 2
+
+[node name="PassiveButton1" type="Button" parent="CanvasLayer/UI/ShopPanel/VBox/PassiveButtons" unique_id=1667290779]
+custom_minimum_size = Vector2(100, 50)
+layout_mode = 2
+
+[node name="PassiveButton2" type="Button" parent="CanvasLayer/UI/ShopPanel/VBox/PassiveButtons" unique_id=1493946044]
+custom_minimum_size = Vector2(100, 50)
+layout_mode = 2
+
+[node name="ExtrasButtons" type="HBoxContainer" parent="CanvasLayer/UI/ShopPanel/VBox" unique_id=1014283827]
+layout_mode = 2
+
+[node name="PackButton" type="Button" parent="CanvasLayer/UI/ShopPanel/VBox/ExtrasButtons" unique_id=1959418218]
+custom_minimum_size = Vector2(150, 40)
+layout_mode = 2
+
+[node name="RerollButton" type="Button" parent="CanvasLayer/UI/ShopPanel/VBox/ExtrasButtons" unique_id=1082123013]
+custom_minimum_size = Vector2(150, 40)
+layout_mode = 2
+
+[node name="ContinueButton" type="Button" parent="CanvasLayer/UI/ShopPanel/VBox" unique_id=1004888845]
+layout_mode = 2
+text = "Continue to Next Wave"
 
 [connection signal="pressed" from="CanvasLayer/UI/VBox/Buttons/FightButton" to="." method="_on_fight_pressed"]
 [connection signal="pressed" from="CanvasLayer/UI/VBox/Buttons/SendWaveButton" to="." method="_on_send_wave_pressed"]

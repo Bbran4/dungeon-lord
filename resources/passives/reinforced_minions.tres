@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="PassiveData" format=3 uid="uid://d0wg0252xoeoy"]
+
+[ext_resource type="Script" uid="uid://bknm672sb31js" path="res://scripts/passives/PassiveData.gd" id="1_lyiqo"]
+
+[resource]
+script = ExtResource("1_lyiqo")
+passive_name = "Reinforced Minions"
+description = "+20% monster health"
+cost = 35
+effect_type = 3
+magnitude = 0.2
+metadata/_custom_type_script = "uid://bknm672sb31js"

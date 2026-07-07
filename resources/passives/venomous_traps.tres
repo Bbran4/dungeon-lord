@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="PassiveData" format=3 uid="uid://b3bls06sa0kf7"]
+
+[ext_resource type="Script" uid="uid://bknm672sb31js" path="res://scripts/passives/PassiveData.gd" id="1_rvnn2"]
+
+[resource]
+script = ExtResource("1_rvnn2")
+passive_name = "Venemous Traps"
+description = "+25% trap damage"
+effect_type = 1
+magnitude = 0.25
+metadata/_custom_type_script = "uid://bknm672sb31js"
