@@ -6,8 +6,16 @@ extends Node
 ## per shop visit - NOT "one room total" or "one passive total". The
 ## player may buy multiple DIFFERENT room/passive offers in the same
 ## visit; they just can't buy the exact same offered slot twice.
-## Rerolling resets every slot's bought status back to available (as
-## well as reshuffling every slot except the discounted one).
+##
+## REROLL is limited to ONCE per shop visit (see _reroll_used, reset in
+## open_shop). Rerolling reshuffles every slot EXCEPT the discounted one
+## and resets every slot's bought status back to available.
+##
+## PASSIVE CAPS: some passives (PassiveData.max_stacks) can only ever be
+## owned a limited number of times across the whole run - see
+## PassiveManager.can_apply. buy_passive refuses once a passive is
+## capped, and _generate_offers filters capped-out passives out of the
+## pool so they stop appearing as offers entirely once maxed.
 ##
 ## Room offers are drawn only from base-tier RoomData - already-
 ## upgraded tiers are reached via the in-dungeon upgrade path, not
@@ -63,6 +71,10 @@ var discount_index: int = 0
 
 var is_open: bool = false
 
+## True once a reroll has been used THIS shop visit. Reset by
+## open_shop(). Checked by reroll() before anything else.
+var _reroll_used: bool = false
+
 ## RoomData -> int. How many free placements of that exact resource are
 ## currently owed to the player. Incremented by a room purchase or a
 ## card pack's free-room roll; decremented by consume_free_room()
@@ -72,6 +84,7 @@ var _free_room_credits: Dictionary = {}
 
 func open_shop() -> void:
 	is_open = true
+	_reroll_used = false
 	_generate_offers()
 	_pick_discount()
 	shop_opened.emit()
@@ -86,13 +99,24 @@ func get_reroll_cost() -> int:
 	return maxi(0, int(round(reroll_cost_base - PassiveManager.get_reroll_discount())))
 
 
+func has_reroll_remaining() -> bool:
+	return not _reroll_used
+
+
 ## Reshuffles every offer slot EXCEPT whichever one currently holds the
 ## discount, so the discounted item survives a reroll unchanged. Also
-## resets EVERY slot's bought status back to available.
+## resets EVERY slot's bought status back to available. Limited to ONE
+## use per shop visit - refuses once _reroll_used is true, before even
+## checking gold.
 func reroll() -> bool:
+
+	if _reroll_used:
+		return false
 
 	if not EconomyManager.spend_gold(get_reroll_cost()):
 		return false
+
+	_reroll_used = true
 
 	var kept_room: RoomData = room_offers[discount_index] if discount_category == "room" and discount_index < room_offers.size() else null
 	var kept_passive: PassiveData = passive_offers[discount_index] if discount_category == "passive" and discount_index < passive_offers.size() else null
@@ -147,10 +171,16 @@ func buy_room(index: int) -> bool:
 
 
 ## Buys the passive at `index`. Same per-slot (not per-category) limit
-## as buy_room - buying one passive offer doesn't block buying another.
+## as buy_room. Additionally refuses if PassiveManager.can_apply()
+## says this exact passive has already hit its max_stacks cap.
 func buy_passive(index: int) -> bool:
 
 	if index < 0 or index >= passive_offers.size() or passive_bought[index]:
+		return false
+
+	var passive_data: PassiveData = passive_offers[index]
+
+	if not PassiveManager.can_apply(passive_data):
 		return false
 
 	if not EconomyManager.spend_gold(get_price("passive", index)):
@@ -158,7 +188,6 @@ func buy_passive(index: int) -> bool:
 
 	passive_bought[index] = true
 
-	var passive_data: PassiveData = passive_offers[index]
 	PassiveManager.apply_passive(passive_data)
 	passive_purchased.emit(passive_data)
 	return true
@@ -166,7 +195,9 @@ func buy_passive(index: int) -> bool:
 
 ## Unlimited purchases, always at flat pack_cost - not affected by
 ## reroll or the per-offer "once per visit" limit (packs aren't offer
-## slots at all).
+## slots at all). A capped-out passive roll (2) is re-rolled as a
+## refund of pack_cost worth of gold instead, same treatment as an
+## empty pool.
 func buy_pack() -> bool:
 
 	if not EconomyManager.spend_gold(pack_cost):
@@ -192,11 +223,13 @@ func buy_pack() -> bool:
 				room_purchased.emit(room_data)
 
 		2:
-			if passive_pool.is_empty():
+			var available_passives: Array = passive_pool.filter(func(p: PassiveData) -> bool: return PassiveManager.can_apply(p))
+
+			if available_passives.is_empty():
 				EconomyManager.add_gold(pack_cost)
 				pack_opened.emit("Card Pack: nothing to give - refunded.")
 			else:
-				var passive_data: PassiveData = passive_pool[randi() % passive_pool.size()]
+				var passive_data: PassiveData = available_passives[randi() % available_passives.size()]
 				PassiveManager.apply_passive(passive_data)
 				pack_opened.emit("Card Pack: a passive - %s!" % passive_data.passive_name)
 
@@ -222,10 +255,21 @@ func consume_free_room(room_data: RoomData) -> bool:
 	return true
 
 
+## Also usable by DungeonGrid.request_insert's rollback path if an
+## insert fails after a credit was already consumed.
+func refund_room_credit(room_data: RoomData) -> void:
+	_free_room_credits[room_data] = _free_room_credits.get(room_data, 0) + 1
+
+
+## Passives already maxed out (PassiveManager.can_apply() == false) are
+## excluded from the pool entirely, so a fully-stacked passive stops
+## appearing as an offer at all rather than showing up unbuyable.
 func _generate_offers() -> void:
 
 	room_offers = _pick_random_unique(room_pool, 3)
-	passive_offers = _pick_random_unique(passive_pool, 3)
+
+	var available_passives: Array = passive_pool.filter(func(p: PassiveData) -> bool: return PassiveManager.can_apply(p))
+	passive_offers = _pick_random_unique(available_passives, 3)
 
 	room_bought = []
 	room_bought.resize(room_offers.size())

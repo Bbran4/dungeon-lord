@@ -9,4 +9,5 @@ description = "Shop rerolls cost 5 less gold"
 cost = 20
 effect_type = 4
 magnitude = 5.0
+max_stacks = 2
 metadata/_custom_type_script = "uid://bknm672sb31js"

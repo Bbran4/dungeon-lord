@@ -381,7 +381,13 @@ func _refresh_shop_ui() -> void:
 		shop_passive_buttons[i].disabled = ShopManager.passive_bought[i]
 
 	shop_pack_button.text = "Card Pack (%dg)" % ShopManager.pack_cost
-	shop_reroll_button.text = "Reroll (%dg)" % ShopManager.get_reroll_cost()
+
+	if ShopManager.has_reroll_remaining():
+		shop_reroll_button.text = "Reroll (%dg)" % ShopManager.get_reroll_cost()
+		shop_reroll_button.disabled = false
+	else:
+		shop_reroll_button.text = "Reroll (used)"
+		shop_reroll_button.disabled = true
 
 
 func _on_buy_room_pressed(index: int) -> void:

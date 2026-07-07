@@ -13,4 +13,9 @@ class_name PassiveData
 ## REROLL_DISCOUNT: a flat gold amount subtracted from the shop's reroll cost.
 @export var magnitude : float = 0.15
 
+## Maximum number of times this exact passive can ever be owned at
+## once, across the whole run (not per shop visit). 0 = unlimited.
+## Enforced by PassiveManager.can_apply() / get_stack_count().
+@export var max_stacks : int = 0
+
 @export var icon : Texture2D
