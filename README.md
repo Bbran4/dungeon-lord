@@ -72,7 +72,7 @@ Hero Party Enters
 
 ↓
 
-Heroes Fight Through Dungeon
+Heroes Fight Through Dungeon (including the boss room, if the party's route reaches it)
 
 ↓
 
@@ -100,10 +100,6 @@ Wave 10 Full Wipe → RUN VICTORY
 
 ↓
 
-Biome Boss (not yet implemented)
-
-↓
-
 Next Biome (not yet implemented)
 
 ↓
@@ -125,11 +121,17 @@ This section describes systems that exist and run in `scenes/test/TestHarness.ts
 
 Build rooms, upgrade them, expand your dungeon mid-run, and create combinations that work well together.
 
-> **Status:** implemented, with a hard cap. `DungeonManager.max_rooms`
-> (6) limits how many rooms a dungeon can hold at once — once at cap,
-> every `RoomGapZone` locks itself (`DungeonGrid._update_gap_zone_lock_state`),
-> refusing to even show itself during a card drag, let alone accept a
-> drop. Selling a room re-opens a slot immediately.
+> **Status:** implemented as a real 2D grid (`DungeonManager.grid_size`,
+> default 6×6). New rooms may only be placed adjacent to something
+> already connected — the entrance, the boss room, or an existing
+> room — so the dungeon always grows outward, never as disconnected
+> fragments, and branching to multiple routes is fully supported.
+> `DungeonManager.max_rooms` (6) still caps player-built room COUNT
+> independent of grid size. Doors are rendered from the actual
+> connection graph (`DungeonManager.connections`), not raw adjacency —
+> see the Architecture note above. Selling a room tears down its
+> connections and re-opens capacity on whatever it was attached to
+> immediately.
 
 ### 🃏 Card Hand System
 
@@ -145,10 +147,17 @@ Rooms and traps **are** the cards — there's no separate ability-modifier card 
   (`ShopManager.buy_pack`) adds straight to the hand via
   `CardHandManager.add_card`.
 * **Placing a card:** dragging a card out of the hand onto a
-  `RoomGapZone` calls `DungeonGrid.request_insert`, which consumes the
-  matching card from the hand instead of charging gold at drop time —
-  the cost was already paid when the card was acquired. A failed
-  insert refunds the card back to the hand.
+  `RoomGapZone` (now one per empty, currently-reachable grid cell,
+  not a seam between linear neighbors) calls `DungeonGrid.request_insert`,
+  which consumes the matching card from the hand instead of charging
+  gold at drop time — the cost was already paid when the card was
+  acquired. A failed placement refunds the card back to the hand.
+* **Placing the boss room** uses the same drag-and-drop machinery but
+  isn't hand-based — it's a permanently-available palette card
+  (never consumed), identified by reference against
+  `DungeonManager.boss_room`. Dragging it onto a valid cell places or
+  relocates it, with no limit on how many times it can be moved during
+  Building.
 * **Upgrade cards are separate.** The two upgrade palette entries
   remain fixed, always-available, gold-delta-charged slots — only
   base-tier room/trap acquisition moved to the hand.
@@ -286,8 +295,19 @@ Currently authored (`resources/passives/`): **Golden Touch** (gold multiplier), 
 
 ### 👑 Bosses
 
-> **Status:** `BossData` exists as a data resource, but there is no
-> boss room encounter logic, phase handling, or summon spawning yet.
+### 👑 Bosses
+
+Every biome's boss is a real, playable **boss room** — not a card, not something drafted, but something the player places (and can freely relocate anywhere in their connected dungeon at any time during Building). It's fought the moment the party's route reaches it, on every wave, through the same combat pipeline as any other room.
+
+> **Status:** implemented. `BossData` carries real combat stats plus
+> an ordered `phases: Array[BossPhaseData]` — phase 0 is active from
+> the start, and each later phase triggers the first time the boss's
+> health ratio drops to its `health_threshold`, permanently swapping
+> in a new special-ability set and spawning that phase's summons
+> mid-fight. `CombatManager.begin_boss_combat()` reuses the same tick
+> loop and threat/taunt/buff machinery as a normal group fight. See
+> `resources/bosses/`, `scripts/bosses/BossData.gd`,
+> `scripts/bosses/BossPhaseData.gd`, and `Dungeon._fight_boss_room`.
 
 ---
 
@@ -356,7 +376,9 @@ A recurring class of crash (`Invalid type in function — previously freed objec
 
 What's actually playable today, via `scenes/test/TestHarness.tscn`:
 
-* ✅ Linear dungeon path (entrance → rooms → exit), capped at 6 rooms with gap-zone locking at the cap
+* ✅ **2D dungeon grid** (default 6×6): rooms grow outward from a fixed entrance cell, branching to multiple routes is supported, capped at 6 buildable rooms independent of grid size
+* ✅ **Dynamic, cycle-safe doorways**: a room's doors reflect its actual capped connections, not raw grid adjacency
+* ✅ **A real, placeable boss room**: player-positioned via drag-and-drop, movable anytime during Building, fought via the same pipeline as any room, with health-threshold phases and mid-fight summons
 * ✅ **Card hand system:** starting hand of 3 cards, dragged from a fanned hand into a `RoomGapZone` to place for free
 * ✅ **Visual cards:** rarity-tinted border, gold-cost badge, room icon/art, description
 * ✅ **Hand presentation:** peek-and-rise fan via an unclipped overlay layer
@@ -387,18 +409,26 @@ What's actually playable today, via `scenes/test/TestHarness.tscn`:
 Notably **not yet wired up**, despite the underlying scripts existing:
 
 * ⬜ No forced single-choice draft — the shop lets the player buy any/all of its offered cards; `CardData` (the original standalone card resource) is unused
-* ⬜ `BossData` has no room encounter, phase, or summon logic
 * ⬜ `RoomData.room_type`, `HeroData.class_type`, and `CardData.rarity` still aren't centralized on `GameEnums`
 * ⬜ No hero-side targeting AI — heroes pick a random living enemy rather than anything priority-based
 * ⬜ No economy/gold-cost tuning pass yet — numbers are functional placeholders
 * ⬜ Hand size is uncapped — no overflow handling yet
 * ⬜ Everything in **The Bigger Vision** above — hero personalities, room families, resource chains, reputation, living dungeon, room evolution, boss characters, evil choices — is design intent only, with no code behind it yet
 
-> **Architecture note:** the original plan called this a "Dungeon
-> Grid," but what's implemented is a **linear ordered path**
-> (`DungeonManager` stores a flat, always-contiguous `Array[RoomData]`),
-> not a 2D grid. Worth flagging in case a true grid layout is still
-> the long-term intent.
+> **Architecture update:** the dungeon is now a real 2D grid, not a
+> linear path. `DungeonManager` holds a sparse `Dictionary[Vector2i,
+> RoomData]` over a fixed `grid_size` (default 6×6); rooms grow
+> outward from a fixed entrance cell, and branching is fully
+> supported — the player can build more than one route to the boss
+> room. Doors between rooms are decided at placement time and gated
+> by a cycle-prevention rule (a new connection is skipped if the two
+> rooms are already reachable from each other some other way), which
+> is what stops a looping layout from silently opening an unintended
+> extra doorway through an already-built room while still allowing
+> genuine forks anywhere. The entrance and the boss room are the only
+> two cells exempt from that rule, since they're the intended points
+> multiple branches are allowed to converge at. See `DungeonManager.gd`
+> (`connections`, `get_shortest_path`) and `DungeonGrid.gd`.
 
 ---
 
@@ -424,7 +454,7 @@ The systems that actually deliver on the "outsmart the heroes" pillars
 forward ahead of them, right after the two milestones already in
 progress.
 
-1. ✅ Dungeon Grid *(implemented as a linear path, capped at 6 rooms)*
+1. ✅ Dungeon Grid *(a real 2D grid — branching paths, dynamic doorways, capped at 6 buildable rooms)*
 2. ✅ Placeable Rooms
 3. ✅ Hero Movement
 4. ✅ Basic Combat
@@ -435,7 +465,7 @@ progress.
 9. 🟡 Hero Parties *(class formation, aggro/taunt, full kits done; no targeting AI yet)*
 10. ⬜ Hero Expeditions & Reputation *(the core "outsmart the heroes" differentiator — makes heroes intelligent adversaries instead of moving HP bars)*
 11. ⬜ Room Families & Living Dungeon *(the "everything interacts" pillar — rooms combo instead of just stacking stats)*
-12. ⬜ Boss Encounters *(now includes boss-as-character beats from The Bigger Vision, not just a stat-check fight)*
+12. 🟡 Boss Encounters *(a real, placeable boss room with phases and summons is implemented; boss-as-character beats from The Bigger Vision are still just design intent)*
 13. ⬜ Biomes
 14. ⬜ Meta Progression
 
@@ -449,7 +479,7 @@ The project follows a vertical slice approach, completing one fully playable lay
 
 ## ✅ MILESTONE 1 — Playable Dungeon Prototype (COMPLETE)
 
-* ✅ Dungeon grid (linear path)
+* ✅ Dungeon grid (2D grid with branching paths)
 * ✅ Placeable rooms
 * ✅ Skeleton room
 * ✅ Hero movement
@@ -539,7 +569,7 @@ interacts" pillar — rather than a rack of independent stat boxes.
 
 ---
 
-## 🟢 MILESTONE 7 — Boss Encounters (NOT STARTED)
+## 🟡 MILESTONE 7 — Boss Encounters (IN PROGRESS)
 
 ### Goal
 
@@ -549,9 +579,9 @@ check.
 
 ### Tasks
 
-* ⬜ Boss room encounter logic
-* ⬜ Boss AI
-* ⬜ Multiple boss phases
+* ✅ Boss room encounter logic (a real, player-placed and freely-movable room, fought via `CombatManager.begin_boss_combat`)
+* ⬜ Boss AI *(currently uses the same threat/cooldown logic as any monster — no boss-specific decision-making yet)*
+* ✅ Multiple boss phases (health-threshold-triggered ability swaps, with mid-fight summons)
 * ⬜ Boss upgrades
 * ⬜ Raid mechanics
 * ⬜ Boss reacts to and comments on what's been built over the run
@@ -559,7 +589,7 @@ check.
 
 ### Success Criteria
 
-* ⬜ Boss fights become the climax of each biome
+* 🟡 Boss fights become the climax of each biome *(mechanically true — it's a real, unavoidable encounter on the connected route — but not yet a "climax" in feel, since it fights with a monster's kit, not a bespoke one)*
 * ⬜ Players form an actual sense of relationship with their boss across a run
 
 ---
