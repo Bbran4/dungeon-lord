@@ -17,6 +17,15 @@ class_name DungeonGrid
 ## still drives the shop's price and a room's sell refund - it's just
 ## not charged a second time here.
 ##
+## BOSS ROOM: DungeonManager.boss_room is a second, separate room slot
+## that always renders as one extra room after every player-built room
+## and before the exit - never insertable-into, sellable, or
+## upgradable, and never counted against max_rooms. Set once per run
+## via DungeonManager.set_boss_room() (see BiomeManager). This is
+## rendered with its own dedicated node (boss_room_node), kept entirely
+## out of room_nodes so none of the player-room interaction logic
+## (selection, sell, upgrade, gap-zone math) can ever touch it.
+##
 ## Assumes DungeonManager, EconomyManager, and CardHandManager are
 ## autoload singletons.
 
@@ -34,6 +43,16 @@ var gap_zones: Array[RoomGapZone] = []
 var entrance_marker: Node2D
 var exit_marker: Node2D
 
+## The dedicated visual node for DungeonManager.boss_room, or null if
+## the active biome has no boss room set. Never appears in room_nodes.
+var boss_room_node: Room = null
+
+## path_index (as used by get_path_waypoints/get_room_data_at_path_index)
+## -> RoomData, rebuilt every _rebuild_layout(). Covers both player
+## rooms and the trailing boss room slot, so callers don't need to
+## know which is which.
+var _room_data_by_path_index: Dictionary = {}
+
 var _selected_index: int = -1
 
 
@@ -42,6 +61,7 @@ func _ready() -> void:
 	DungeonManager.room_inserted.connect(_on_dungeon_changed)
 	DungeonManager.room_removed.connect(_on_dungeon_changed)
 	DungeonManager.room_upgraded.connect(_on_dungeon_changed)
+	DungeonManager.boss_room_changed.connect(_on_dungeon_changed)
 
 	_create_markers()
 	_rebuild_layout()
@@ -131,9 +151,10 @@ func sell_room_at(index: int) -> bool:
 	return removed
 
 
-## Waypoints for hero movement: entrance, then each room slot, then exit.
-## Every position is the vertical center of its room, so a hero walking
-## this path stays centered top-to-bottom the whole way through.
+## Waypoints for hero movement: entrance, then each player room slot,
+## then the boss room (if any), then exit. Every position is the
+## vertical center of its room, so a hero walking this path stays
+## centered top-to-bottom the whole way through.
 func get_path_waypoints() -> Array[Vector2]:
 
 	var waypoints: Array[Vector2] = []
@@ -143,6 +164,9 @@ func get_path_waypoints() -> Array[Vector2]:
 	for room: Room in room_nodes:
 		waypoints.append(room.position)
 
+	if is_instance_valid(boss_room_node):
+		waypoints.append(boss_room_node.position)
+
 	waypoints.append(exit_marker.position)
 
 	return waypoints
@@ -150,11 +174,10 @@ func get_path_waypoints() -> Array[Vector2]:
 
 ## Maps a waypoint index (from get_path_waypoints) back to its RoomData.
 ## Index 0 is the entrance and has no room; the last index is the exit.
+## Backed by a lookup table rebuilt every _rebuild_layout(), rather than
+## arithmetic, since the boss room makes the mapping non-uniform.
 func get_room_data_at_path_index(path_index: int) -> RoomData:
-
-	var room_index: int = path_index - 1
-
-	return DungeonManager.get_room(room_index)
+	return _room_data_by_path_index.get(path_index, null)
 
 
 ## Called by a palette/build UI when a matching room card starts dragging.
@@ -240,10 +263,27 @@ func _rebuild_layout() -> void:
 		room.upgrade_zone.upgrade_requested.connect(_on_upgrade_requested)
 
 		room_nodes.append(room)
+		_room_data_by_path_index[i + 1] = room_data
 
 		_add_gap_zone(i + 1)
 
-	exit_marker.position = Vector2(_slot_center_x(room_count + 1), 0.0)
+	var trailing_slot: int = room_count + 1
+
+	if DungeonManager.boss_room != null:
+
+		boss_room_node = room_scene.instantiate() as Room
+		add_child(boss_room_node)
+		boss_room_node.position = Vector2(_slot_center_x(trailing_slot), 0.0)
+		boss_room_node.set_room(DungeonManager.boss_room)
+		# Deliberately NOT connected to room_clicked / sell_requested /
+		# upgrade_zone - the boss room can't be selected, sold, or
+		# upgraded, it's fixed for the whole run.
+
+		_room_data_by_path_index[trailing_slot] = DungeonManager.boss_room
+
+		trailing_slot += 1
+
+	exit_marker.position = Vector2(_slot_center_x(trailing_slot), 0.0)
 
 
 func _add_gap_zone(insert_index: int) -> void:
@@ -311,7 +351,9 @@ func _on_sell_requested(room: Room) -> void:
 
 ## Locks/unlocks every gap zone based on whether the dungeon is
 ## currently at its room cap. Called once in _ready() and again after
-## any successful insert or sell, since either can cross the cap.
+## any successful insert or sell, since either can cross the cap. The
+## boss room is intentionally excluded from this check - it never
+## counts against max_rooms.
 func _update_gap_zone_lock_state() -> void:
 
 	var at_cap: bool = DungeonManager.room_count() >= DungeonManager.max_rooms
@@ -326,6 +368,12 @@ func _clear_layout() -> void:
 			room.queue_free()
 
 	room_nodes.clear()
+
+	if is_instance_valid(boss_room_node):
+		boss_room_node.queue_free()
+	boss_room_node = null
+
+	_room_data_by_path_index.clear()
 
 	for zone: RoomGapZone in gap_zones:
 		if is_instance_valid(zone):

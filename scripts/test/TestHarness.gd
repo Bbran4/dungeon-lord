@@ -98,6 +98,8 @@ func _connect_signals() -> void:
 	dungeon.hero_escaped.connect(_on_hero_escaped)
 	dungeon.wave_cleared.connect(_on_wave_cleared)
 	dungeon.trap_triggered.connect(_on_trap_triggered)
+	dungeon.boss_encounter_started.connect(_on_boss_encounter_started)
+	dungeon.boss_phase_reached.connect(_on_boss_phase_reached)
 	dungeon_grid.room_placed.connect(_on_room_placed)
 
 	GameManager.building_phase_started.connect(_on_building_phase_started)
@@ -138,11 +140,13 @@ func _reset_test() -> void:
 	CardHandManager.reset()
 	DungeonManager.generate_dungeon()
 
+	BiomeManager.set_biome(starting_biome)
+	DungeonManager.set_boss_room(BiomeManager.get_current_boss_room())
+
 	shop_panel.visible = false
 
 	skeleton_upgraded_card.set_room_data(skeleton_room_upgraded_data)
 	skeleton_elite_card.set_room_data(skeleton_room_elite_data)
-
 	for room_data: RoomData in starting_hand_cards:
 		CardHandManager.add_card(room_data)
 
@@ -339,6 +343,12 @@ func _on_reward_phase_started() -> void:
 func _on_trap_triggered(hero: CombatEntity, trap_data: TrapData) -> void:
 	_log("%s triggered %s!" % [hero.name, trap_data.trap_name])
 
+func _on_boss_encounter_started(boss_data: BossData) -> void:
+	_log("👑 %s emerges to defend the dungeon!" % boss_data.boss_name)
+
+
+func _on_boss_phase_reached(boss_data: BossData, phase_index: int, announcement: String) -> void:
+	_log("👑 %s: %s" % [boss_data.boss_name, announcement if announcement != "" else "Phase %d!" % (phase_index + 1)])
 
 func _on_ability_used(message: String) -> void:
 	_log(message)

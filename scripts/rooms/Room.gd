@@ -45,6 +45,9 @@ func update_visuals() -> void:
 			monster_label.text = room_data.monster.monster_name
 
 		monster_label.visible = true
+	elif room_data.boss != null:
+		monster_label.text = "👑 %s" % room_data.boss.boss_name
+		monster_label.visible = true
 	else:
 		monster_label.text = ""
 		monster_label.visible = false

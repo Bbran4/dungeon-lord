@@ -11,7 +11,11 @@ class_name BiomeData
 
 @export var hero_pool : Array[HeroData]
 
-@export var boss : BossData
+## The dungeon's fixed boss encounter for this biome, authored as a
+## RoomData (room_type = "Boss", boss = a BossData) rather than a bare
+## BossData - the room needs a name/icon/description like any other
+## room, it just isn't a card. See DungeonManager.set_boss_room.
+@export var boss_room : RoomData
 
 @export var wave_count : int = 10
 

@@ -253,7 +253,7 @@ func _run_party() -> void:
 			return
 
 		var room_data: RoomData = dungeon_grid.get_room_data_at_path_index(i)
-		var is_dangerous: bool = room_data != null and (room_data.monster != null or room_data.trap != null)
+		var is_dangerous: bool = room_data != null and (room_data.monster != null or room_data.trap != null or room_data.boss != null)
 		var speed_multiplier: float = room_danger_speed_multiplier if is_dangerous else 1.0
 
 		await _move_party_to(waypoints[i], speed_multiplier)
@@ -292,14 +292,17 @@ func _run_party() -> void:
 			if _living_party_entities().is_empty():
 				_finish_wave()
 				return
+				
+		if room_data != null and room_data.boss != null:
 
-	if _is_boss_wave():
-		await _run_boss_encounter()
-		if _living_party_entities().is_empty():
-			_finish_wave()
-			return
+			await _fight_boss_room(room_data, waypoints[i])
 
+			if _living_party_entities().is_empty():
+				_finish_wave()
+				return
+				
 	_resolve_escaped_party()
+
 
 
 ## Fire-and-forget visual charge: melee-flagged living heroes step
@@ -637,27 +640,19 @@ func _clear_remaining_room_monsters() -> void:
 
 	_room_monsters.clear()
 
-## True only on the biome's climax wave - the one that would trigger
-## GameManager.start_victory() on a full wipe. WaveManager.current_wave
-## counts full wipes already survived, so the wave about to be
-## attempted is current_wave + 1.
-func _is_boss_wave() -> bool:
-	return WaveManager.current_wave + 1 >= WaveManager.max_wave
+## Fights the dungeon's fixed boss room. Unlike a monster room's group
+## (respawned fresh every wave in _spawn_all_room_monsters), the boss
+## CombatEntity is spawned right here, the instant the party reaches
+## it - room_data.boss is the SAME BossData every single wave (set
+## once for the whole run via DungeonManager.set_boss_room at game
+## start), only the CombatEntity instance is per-wave, same lifecycle
+## as any other room's monsters.
+func _fight_boss_room(room_data: RoomData, boss_position: Vector2) -> void:
 
-
-## Called from _run_party() after the party has survived every built
-## room, only on the boss wave, only if the active biome has a boss
-## configured. This is what makes the boss "automatically start in the
-## dungeon based on the biome" rather than something the player places.
-func _run_boss_encounter() -> void:
-
-	var boss_data: BossData = BiomeManager.get_current_boss()
+	var boss_data: BossData = room_data.boss
 
 	if boss_data == null or boss_data.phases.is_empty():
 		return
-
-	var waypoints: Array[Vector2] = dungeon_grid.get_path_waypoints()
-	var boss_position: Vector2 = waypoints[waypoints.size() - 1]
 
 	var boss: CombatEntity = monster_scene.instantiate() as CombatEntity
 	boss.name = "Boss_%s" % boss_data.boss_name
@@ -666,7 +661,7 @@ func _run_boss_encounter() -> void:
 	boss.configure(boss_data.max_health, boss_data.damage, boss_data.armor, boss_data.attack_speed, boss_data.phases[0].abilities)
 	boss.is_melee = boss_data.is_melee
 	boss.projectile_color = boss_data.projectile_color
-	boss.position = boss_position + Vector2(-60, 0)
+	boss.position = boss_position
 
 	if boss.has_node("Body/Label"):
 		boss.get_node("Body/Label").text = boss_data.boss_name

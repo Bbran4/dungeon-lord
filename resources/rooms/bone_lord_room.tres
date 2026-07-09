@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="RoomData" format=3 uid="uid://psx50d3wbsba"]
+
+[ext_resource type="Resource" uid="uid://ds8epb4lq22ex" path="res://resources/bosses/bone_lord.tres" id="1_hhnf0"]
+[ext_resource type="Script" uid="uid://dx42j73ykak67" path="res://scripts/rooms/RoomData.gd" id="1_t8iy4"]
+
+[resource]
+script = ExtResource("1_t8iy4")
+room_name = "Bone Lord's Sanctum"
+room_type = "Boss"
+boss = ExtResource("1_hhnf0")
+metadata/_custom_type_script = "uid://dx42j73ykak67"

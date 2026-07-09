@@ -42,3 +42,7 @@ var room_type : String = "Monster"
 ## PROJECTILE/DoT) for the rest of the wave - e.g. 0.5 for poison
 ## resistance, or >1.0 as the cost side of a strong buff elsewhere.
 @export var trap_damage_multiplier : float = 1.0
+## Boss rooms only (room_type == "Boss"). The boss fought in this room.
+## Not a card - this room is never drafted into the hand, it's placed
+## automatically via DungeonManager.set_boss_room(). See BiomeData.boss_room.
+@export var boss : BossData

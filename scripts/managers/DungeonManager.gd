@@ -12,13 +12,27 @@ signal dungeon_generated
 signal room_inserted(index: int, room_data: RoomData)
 signal room_removed(index: int)
 signal room_upgraded(index: int, room_data: RoomData)
+signal boss_room_changed(room_data: RoomData)
 
 var rooms: Array[RoomData] = []
+
+## The dungeon's fixed boss room, if the active biome has one. Unlike
+## `rooms`, this is never inserted, sold, or upgraded by the player -
+## it's set once per run (see set_boss_room, normally called right
+## after generate_dungeon() from BiomeManager) and DungeonGrid always
+## renders it as one extra room after every player-built room, right
+## before the exit. It does NOT count against max_rooms.
+var boss_room: RoomData = null
 
 
 func generate_dungeon(initial_rooms: Array[RoomData] = []) -> void:
 	rooms = initial_rooms.duplicate()
 	dungeon_generated.emit()
+
+
+func set_boss_room(room_data: RoomData) -> void:
+	boss_room = room_data
+	boss_room_changed.emit(room_data)
 
 
 func room_count() -> int:
