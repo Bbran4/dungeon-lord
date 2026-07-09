@@ -441,13 +441,24 @@ The project follows a vertical slice approach, completing one fully playable lay
 
 ## ✅ MILESTONE 1 — Playable Dungeon Prototype (COMPLETE)
 
-* ✅ Dungeon grid (linear path) · ✅ Placeable rooms · ✅ Skeleton room · ✅ Hero movement · ✅ Basic combat · ✅ Hero death · ✅ Victory/Defeat · ✅ Gold rewards
+* ✅ Dungeon grid (linear path)
+* ✅ Placeable rooms
+* ✅ Skeleton room
+* ✅ Hero movement
+* ✅ Basic combat
+* ✅ Hero death
+* ✅ Victory/Defeat
+* ✅ Gold rewards
 
 ---
 
 ## ✅ MILESTONE 2 — Dungeon Progression (COMPLETE)
 
-* ✅ Multiple room types (trap + utility) · ✅ Room upgrades (multi-tier chains) · 🟡 Economy balancing (real levers exist; no tuning pass yet) · ✅ Dungeon expansion, capped at 6 rooms · ✅ Multiple waves (outcome-driven tiers, 10-wave victory)
+* ✅ Multiple room types (trap + utility)
+* ✅ Room upgrades (multi-tier chains)
+* 🟡 Economy balancing (real levers exist; no tuning pass yet)
+* ✅ Dungeon expansion, capped at 6 rooms
+* ✅ Multiple waves (outcome-driven tiers, 10-wave victory)
 
 *(Called complete per project decision — real room/trap/utility variety, full class kits, outcome-driven scaling, and a post-wave shop with passives together clear the original bar. Success criteria stay 🟡 in the spirit of staying honest about remaining build-variety and tuning work.)*
 
@@ -465,25 +476,42 @@ The project follows a vertical slice approach, completing one fully playable lay
 
 ## 🟡 MILESTONE 4 — Hero Parties (IN PROGRESS)
 
-* ✅ Multiple hero classes · 🟡 Party AI (aggro/threat + taunt done, no targeting AI) · ✅ Hero abilities (all five kits) · ⬜ Elite heroes · ⬜ Party compositions
+* ✅ Multiple hero classes
+* 🟡 Party AI (aggro/threat + taunt done, no targeting AI)
+* ✅ Hero abilities (all five kits)
+* ⬜ Elite heroes
+* ⬜ Party compositions
 
 ---
 
 ## 🟢 MILESTONE 5 — Boss Encounters (NOT STARTED)
 
-* ⬜ Boss room · ⬜ Boss AI · ⬜ Multiple boss phases · ⬜ Boss upgrades · ⬜ Raid mechanics
+* ⬜ Boss room
+* ⬜ Boss AI
+* ⬜ Multiple boss phases
+* ⬜ Boss upgrades
+* ⬜ Raid mechanics
 
 ---
 
 ## 🔵 MILESTONE 6 — Biomes (NOT STARTED)
 
-* ⬜ Mountain biome · ⬜ Dwarven Mine · ⬜ Haunted Crypt · ⬜ Additional bosses · ⬜ Unique mechanics
+* ⬜ Mountain biome
+* ⬜ Dwarven Mine
+* ⬜ Haunted Crypt
+* ⬜ Additional bosses
+* ⬜ Unique mechanics
 
 ---
 
 ## 🟣 MILESTONE 7 — Meta Progression (NOT STARTED)
 
-* ⬜ Dark Essence · ⬜ Unlock system · ⬜ New rooms · ⬜ New heroes · ⬜ New monsters · ⬜ New cards
+* ⬜ Dark Essence
+* ⬜ Unlock system
+* ⬜ New rooms
+* ⬜ New heroes
+* ⬜ New monsters
+* ⬜ New cards
 
 ---
 
