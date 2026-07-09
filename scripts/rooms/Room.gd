@@ -12,6 +12,10 @@ var hero: Node = null
 @onready var upgrade_zone: RoomUpgradeZone = $UpgradeZone
 @onready var sell_button: Button = $SellButton
 @onready var monster_label: Label = $MonsterLabel
+@onready var door_north: ColorRect = $DoorNorth
+@onready var door_east: ColorRect = $DoorEast
+@onready var door_south: ColorRect = $DoorSouth
+@onready var door_west: ColorRect = $DoorWest
 
 
 func _ready() -> void:
@@ -53,8 +57,20 @@ func update_visuals() -> void:
 		monster_label.visible = false
 
 
-func show_upgrade_prompt(room_index: int) -> void:
-	upgrade_zone.room_index = room_index
+## Shows/hides this room's 4 edge doorway markers based on which
+## neighbor directions are currently passable (see
+## DungeonGrid._apply_doors). Purely visual - doorways are derived
+## from grid adjacency at render time, never authored per-room; there
+## is no door-configuration field anywhere on RoomData.
+func set_open_doors(open_edges: Dictionary) -> void:
+	door_north.visible = open_edges.get("north", false)
+	door_east.visible = open_edges.get("east", false)
+	door_south.visible = open_edges.get("south", false)
+	door_west.visible = open_edges.get("west", false)
+
+
+func show_upgrade_prompt(cell: Vector2i) -> void:
+	upgrade_zone.cell = cell
 	upgrade_zone.visible = true
 
 

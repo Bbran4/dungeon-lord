@@ -1,52 +1,6 @@
 extends Node2D
 class_name Dungeon
 
-## Moves a whole hero party together through the dungeon's room sequence
-## and resolves each room as a GROUP encounter via
-## CombatManager.begin_group_combat.
-##
-## ENTRANCE SPAWNING: heroes spawn one at a time at the entrance, with a
-## small random gap (hero_spawn_stagger_min..max) between each, all
-## landing in their formation position. The whole party only starts
-## moving toward the first room once everyone has spawned in.
-##
-## Room monsters AND projectile traps are both spawned up front, all at
-## once, when the wave starts - not lazily when the party happens to
-## arrive. A room's monster group and any PoisonArrowTrapController both
-## sit/run at that room's position for the whole wave, regardless of
-## where the party currently is, until the wave ends and everything
-## still standing is cleaned up.
-##
-## Heroes are positioned using a class-based FORMATION rather than
-## simple spawn order: Tank at the front (closest to the monster line),
-## Ranger/Mage in the middle, Healer at the back, Rogue positioned past
-## the monster line entirely (flanking). See _compute_formation_offsets.
-##
-## MELEE CHARGE: the instant a room fight begins, melee-flagged living
-## heroes (HeroData.is_melee) tween forward, closing part of the gap to
-## the monster line (never crossing it - see MELEE_MIN_STANDOFF), while
-## melee monsters step forward to meet them partway
-## (_charge_melee_into_combat). Ranged heroes (Healer/Mage/Ranger)
-## simply hold their formation position. This is purely cosmetic -
-## CombatManager's targeting/damage never reads position - and
-## survivors are smoothly returned to proper formation automatically by
-## the next _move_party_to() call once the room is resolved.
-##
-## MOVEMENT SLOWDOWN: the party moves at room_danger_speed_multiplier
-## (< 1.0) while approaching any room containing a monster or a trap -
-## this is what gives a PROJECTILE trap more chances to land a hit,
-## since the party lingers in the arrow's path longer.
-##
-## INSTANT traps still resolve as a single probabilistic hit per hero
-## right when the party arrives, same as before. PROJECTILE traps are
-## entirely decoupled from party position - see
-## PoisonArrowTrapController.
-##
-## UTILITY ROOMS: arriving at a room with room_type == "Utility" applies
-## its one-time/ongoing effects via _apply_utility_room - optionally
-## healing the whole living party, and multiplying _gold_multiplier /
-## _trap_damage_multiplier for the REST of the wave (both reset to 1.0
-## at the start of each new wave in send_wave()).
 ##
 ## WAVE SCALING: hero stats (max health, damage, armor, attack speed)
 ## AND gold_value are all scaled by WaveManager.current_stat_multiplier()
@@ -56,6 +10,14 @@ class_name Dungeon
 ## Expects a child node named "DungeonGrid" positioned at local origin,
 ## since waypoint coordinates from DungeonGrid are used directly as
 ## this node's children's local positions.
+##
+## PATHING (Stage 3): the party's route is DungeonManager.get_shortest_path()
+## - an Array[Vector2i] of grid cells from the entrance to the boss
+## room - converted to world positions one cell at a time via
+## dungeon_grid.cell_to_position(). There is no more fixed linear
+## waypoint array; the route is recomputed fresh every wave, so it
+## reflects whatever the player has actually built (including
+## branches - the shortest connected route is what gets walked).
 ##
 ## Active hero tracking is delegated to HeroManager (spawn_hero/
 ## remove_hero/active_heroes) as before. Internally, Dungeon also keeps
@@ -141,14 +103,15 @@ var _heroes_died_count: int = 0
 ## (already scaled by the wave multiplier at spawn time), "resolved": bool}
 var _party: Array[Dictionary] = []
 
-## room_index -> Array[CombatEntity]. Populated all at once at the
-## start of a wave; entries are removed as each room is fought, and
+## cell (Vector2i) -> Array[CombatEntity]. Populated all at once at
+## the start of a wave, keyed by the room's grid cell rather than a
+## linear index; entries are removed as each room is fought, and
 ## anything left over is cleaned up when the wave ends.
 var _room_monsters: Dictionary = {}
 
-## room_index -> PoisonArrowTrapController. Populated all at once at
-## the start of a wave for every room with a PROJECTILE trap; all freed
-## together when the wave ends (see _finish_wave).
+## cell (Vector2i) -> PoisonArrowTrapController. Populated all at once
+## at the start of a wave for every room with a PROJECTILE trap; all
+## freed together when the wave ends (see _finish_wave).
 var _room_projectile_traps: Dictionary = {}
 
 var _arrow_pool: Array[TrapArrow] = []
@@ -196,7 +159,7 @@ func send_wave(hero_data_list: Array[HeroData]) -> void:
 		hero.name = "Hero_%s" % hero_data.hero_name
 
 		var offset: Vector2 = offsets[i]
-		hero.position = offset
+		hero.position = dungeon_grid.cell_to_position(DungeonManager.entrance_cell) + offset
 
 		_party.append({
 			"entity": hero,
@@ -243,20 +206,43 @@ func _compute_formation_offsets(hero_data_list: Array[HeroData]) -> Array[Vector
 	return offsets
 
 
+## Resolves a path cell's RoomData - a normal player-built room via
+## DungeonManager.get_room(), or the boss room's RoomData if this cell
+## is currently DungeonManager.boss_cell (boss_room isn't stored in
+## the grid itself, so get_room() alone would return null for it).
+func _room_data_for_cell(cell: Vector2i) -> RoomData:
+	if cell == DungeonManager.boss_cell and DungeonManager.boss_cell != DungeonManager.UNPLACED_CELL:
+		return DungeonManager.boss_room
+	return DungeonManager.get_room(cell)
+
+
 func _run_party() -> void:
 
-	var waypoints: Array[Vector2] = dungeon_grid.get_path_waypoints()
+	var path: Array[Vector2i] = DungeonManager.get_shortest_path()
 
-	for i: int in waypoints.size():
+	if path.is_empty():
+		# Shouldn't normally happen - the Send Wave button should be
+		# gated on DungeonManager.has_connected_path() - but this keeps
+		# a misfire from leaving heroes stranded on-screen forever
+		# instead of just quietly failing.
+		push_warning("Dungeon.send_wave() called with no connected path from entrance to boss room - aborting wave.")
+		for member: Dictionary in _party:
+			if _is_alive(member["entity"]):
+				member["entity"].queue_free()
+		_party.clear()
+		return
+
+	for cell: Vector2i in path:
 
 		if _living_party_entities().is_empty():
 			return
 
-		var room_data: RoomData = dungeon_grid.get_room_data_at_path_index(i)
+		var room_data: RoomData = _room_data_for_cell(cell)
 		var is_dangerous: bool = room_data != null and (room_data.monster != null or room_data.trap != null or room_data.boss != null)
 		var speed_multiplier: float = room_danger_speed_multiplier if is_dangerous else 1.0
+		var waypoint: Vector2 = dungeon_grid.cell_to_position(cell)
 
-		await _move_party_to(waypoints[i], speed_multiplier)
+		await _move_party_to(waypoint, speed_multiplier)
 
 		if room_data != null and room_data.room_type == "Utility":
 			_apply_utility_room(room_data)
@@ -271,13 +257,10 @@ func _run_party() -> void:
 
 		if room_data != null and room_data.monster != null:
 
-			# Path index i corresponds to room index i - 1 (index 0 of
-			# the path is the entrance, which has no room).
-			var room_index: int = i - 1
-			var monsters: Array[CombatEntity] = _room_monsters.get(room_index, [])
+			var monsters: Array[CombatEntity] = _room_monsters.get(cell, [])
 			var living_heroes: Array[CombatEntity] = _living_party_entities()
 
-			_charge_melee_into_combat(monsters, waypoints[i])
+			_charge_melee_into_combat(monsters, waypoint)
 
 			await CombatManager.begin_group_combat(living_heroes, monsters)
 
@@ -285,24 +268,23 @@ func _run_party() -> void:
 				if is_instance_valid(monster):
 					monster.queue_free()
 
-			_room_monsters.erase(room_index)
+			_room_monsters.erase(cell)
 
 			_resolve_dead_party_members()
 
 			if _living_party_entities().is_empty():
 				_finish_wave()
 				return
-				
+
 		if room_data != null and room_data.boss != null:
 
-			await _fight_boss_room(room_data, waypoints[i])
+			await _fight_boss_room(room_data, waypoint)
 
 			if _living_party_entities().is_empty():
 				_finish_wave()
 				return
-				
-	_resolve_escaped_party()
 
+	_resolve_escaped_party()
 
 
 ## Fire-and-forget visual charge: melee-flagged living heroes step
@@ -402,29 +384,23 @@ func _move_party_to(waypoint: Vector2, speed_multiplier: float = 1.0) -> void:
 		await get_tree().create_timer(max_duration).timeout
 
 
-## Spawns every room's monster group up front, all at once, positioned
-## at that room's waypoint. Monsters stay put there for the rest of the
-## wave - they never move (aside from the cosmetic charge-in, see
-## _charge_melee_into_combat) - until the party reaches them (fought and
-## freed in _run_party) or the wave ends (cleaned up in
-## _clear_remaining_room_monsters). Monster stats are NOT scaled by
+## Spawns every room-with-a-monster's group up front, all at once,
+## positioned at that room's cell. Monsters stay put there for the
+## rest of the wave - they never move (aside from the cosmetic
+## charge-in, see _charge_melee_into_combat) - until the party reaches
+## them (fought and freed in _run_party) or the wave ends (cleaned up
+## in _clear_remaining_room_monsters). Monster stats are NOT scaled by
 ## WaveManager - only heroes get stronger as tiers advance.
 func _spawn_all_room_monsters() -> void:
 
 	_clear_remaining_room_monsters()
 
-	var waypoints: Array[Vector2] = dungeon_grid.get_path_waypoints()
-	var room_count: int = DungeonManager.room_count()
+	for cell: Vector2i in DungeonManager.get_shortest_path():
 
-	for i: int in room_count:
-
-		var room_data: RoomData = DungeonManager.get_room(i)
+		var room_data: RoomData = _room_data_for_cell(cell)
 
 		if room_data != null and room_data.monster != null:
-			# Room i sits at waypoint index i + 1 (index 0 is the entrance).
-			_room_monsters[i] = _spawn_monster_group(room_data, waypoints[i + 1])
-		else:
-			_room_monsters[i] = []
+			_room_monsters[cell] = _spawn_monster_group(room_data, dungeon_grid.cell_to_position(cell))
 
 
 func _spawn_monster_group(room_data: RoomData, at_position: Vector2) -> Array[CombatEntity]:
@@ -465,19 +441,15 @@ func _spawn_all_projectile_traps() -> void:
 	_clear_remaining_projectile_traps()
 	_ensure_arrow_pool()
 
-	var waypoints: Array[Vector2] = dungeon_grid.get_path_waypoints()
-	var room_count: int = DungeonManager.room_count()
+	for cell: Vector2i in DungeonManager.get_shortest_path():
 
-	for i: int in room_count:
-
-		var room_data: RoomData = DungeonManager.get_room(i)
+		var room_data: RoomData = _room_data_for_cell(cell)
 
 		if room_data != null and room_data.trap != null and room_data.trap.trap_type == GameEnums.TrapType.PROJECTILE:
 
 			var controller: PoisonArrowTrapController = PoisonArrowTrapController.new()
 			add_child(controller)
-			# Room i sits at waypoint index i + 1 (index 0 is the entrance).
-			controller.position = waypoints[i + 1]
+			controller.position = dungeon_grid.cell_to_position(cell)
 			controller.setup(room_data.trap, _arrow_pool, Callable(self, "_living_party_entities"), _trap_damage_multiplier)
 
 			var trap_data: TrapData = room_data.trap
@@ -488,7 +460,7 @@ func _spawn_all_projectile_traps() -> void:
 
 			controller.start()
 
-			_room_projectile_traps[i] = controller
+			_room_projectile_traps[cell] = controller
 
 
 func _ensure_arrow_pool() -> void:
@@ -505,7 +477,7 @@ func _ensure_arrow_pool() -> void:
 
 func _clear_remaining_projectile_traps() -> void:
 
-	for key: int in _room_projectile_traps.keys():
+	for key: Vector2i in _room_projectile_traps.keys():
 		var controller: PoisonArrowTrapController = _room_projectile_traps[key]
 		if is_instance_valid(controller):
 			controller.stop()
@@ -633,12 +605,13 @@ func _finish_wave() -> void:
 
 func _clear_remaining_room_monsters() -> void:
 
-	for key: int in _room_monsters.keys():
+	for key: Vector2i in _room_monsters.keys():
 		for monster: CombatEntity in _room_monsters[key]:
 			if is_instance_valid(monster):
 				monster.queue_free()
 
 	_room_monsters.clear()
+
 
 ## Fights the dungeon's fixed boss room. Unlike a monster room's group
 ## (respawned fresh every wave in _spawn_all_room_monsters), the boss
@@ -648,8 +621,6 @@ func _clear_remaining_room_monsters() -> void:
 ## start), only the CombatEntity instance is per-wave, same lifecycle
 ## as any other room's monsters.
 func _fight_boss_room(room_data: RoomData, boss_position: Vector2) -> void:
-
-	print("_fight_boss_room called, boss_data=", room_data.boss, " phases=", room_data.boss.phases.size() if room_data.boss else -1)
 
 	var boss_data: BossData = room_data.boss
 

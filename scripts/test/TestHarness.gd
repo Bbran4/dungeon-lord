@@ -66,7 +66,7 @@ class_name TestHarness
 @onready var shop_pack_button: Button = $CanvasLayer/UI/ShopPanel/VBox/ExtrasButtons/PackButton
 @onready var shop_reroll_button: Button = $CanvasLayer/UI/ShopPanel/VBox/ExtrasButtons/RerollButton
 @onready var shop_continue_button: Button = $CanvasLayer/UI/ShopPanel/VBox/ContinueButton
-
+@onready var boss_room_card: RoomCard = $CanvasLayer/UI/VBox/Palette/BossRoomCard
 ## Authored content - assign these in the Inspector (or via the scene
 ## file) to point at .tres resources under res://resources/.
 @export var skeleton_room_data: RoomData
@@ -101,7 +101,8 @@ func _connect_signals() -> void:
 	dungeon.boss_encounter_started.connect(_on_boss_encounter_started)
 	dungeon.boss_phase_reached.connect(_on_boss_phase_reached)
 	dungeon_grid.room_placed.connect(_on_room_placed)
-
+	boss_room_card.drag_started.connect(_on_card_drag_started)
+	boss_room_card.drag_ended.connect(_on_card_drag_ended)
 	GameManager.building_phase_started.connect(_on_building_phase_started)
 	GameManager.combat_phase_started.connect(_on_combat_phase_started)
 	GameManager.reward_phase_started.connect(_on_reward_phase_started)
@@ -142,7 +143,9 @@ func _reset_test() -> void:
 
 	BiomeManager.set_biome(starting_biome)
 	DungeonManager.set_boss_room(BiomeManager.get_current_boss_room())
-
+	boss_room_card.set_room_data(DungeonManager.boss_room)
+	boss_room_card.visible = DungeonManager.boss_room != null
+	
 	shop_panel.visible = false
 
 	skeleton_upgraded_card.set_room_data(skeleton_room_upgraded_data)

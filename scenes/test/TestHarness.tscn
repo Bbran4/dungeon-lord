@@ -103,6 +103,9 @@ layout_mode = 2
 [node name="SkeletonEliteCard" parent="CanvasLayer/UI/VBox/Palette" unique_id=1517738574 instance=ExtResource("18_8sut0")]
 layout_mode = 2
 
+[node name="BossRoomCard" parent="CanvasLayer/UI/VBox/Palette" unique_id=1131208387 instance=ExtResource("18_8sut0")]
+layout_mode = 2
+
 [node name="Hand" type="Control" parent="CanvasLayer/UI/VBox" unique_id=1282283276]
 custom_minimum_size = Vector2(0, 300)
 layout_mode = 2

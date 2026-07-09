@@ -1,87 +1,71 @@
 extends Node2D
 class_name DungeonGrid
 
-## Renders DungeonManager's room sequence as a horizontal path from an
-## entrance to an exit. Rooms sit edge-to-edge (Room's own local origin
-## is its visual center, so this is just `index * room_size.x`); a thin
-## RoomGapZone straddles each seam as a drop target for inserting new
-## rooms, the same way a video editor shows a transition control between
-## two clips. Entrance and exit are drawn as darker placeholder rooms so
-## their footprint is visible even though they hold no RoomData.
+## Renders DungeonManager's sparse grid as an actual 2D layout instead
+## of a single horizontal row. Every empty in-bounds cell gets a
+## RoomGapZone (visible only during a RoomCard drag, and only if
+## DungeonManager.can_place_at(cell) is true at that moment); every
+## occupied cell gets a real Room node.
 ##
-## CARD-BASED PLACEMENT: dropping a room onto a RoomGapZone no longer
-## charges gold directly - it consumes one matching card from
-## CardHandManager's hand (see request_insert). The gold cost was
-## already paid when the card was acquired (a starter card, or bought
-## in the shop via ShopManager.buy_room / a card pack). RoomData.cost
-## still drives the shop's price and a room's sell refund - it's just
-## not charged a second time here.
+## DOORWAYS ARE DERIVED, NEVER AUTHORED: a room's 4 edge doors simply
+## reflect DungeonManager.is_passable() on its neighbors at render
+## time (see _apply_doors) - there's no door-configuration field
+## anywhere on RoomData. This is what makes "the grid decides the
+## doors" rather than "the content author decides the doors."
 ##
-## BOSS ROOM: DungeonManager.boss_room is a second, separate room slot
-## that always renders as one extra room after every player-built room
-## and before the exit - never insertable-into, sellable, or
-## upgradable, and never counted against max_rooms. Set once per run
-## via DungeonManager.set_boss_room() (see BiomeManager). This is
-## rendered with its own dedicated node (boss_room_node), kept entirely
-## out of room_nodes so none of the player-room interaction logic
-## (selection, sell, upgrade, gap-zone math) can ever touch it.
+## THE BOSS ROOM renders wherever DungeonManager.boss_cell currently
+## is (if it's been placed at all - see DungeonManager.UNPLACED_CELL).
+## Boss PLACEMENT UI is deliberately not built yet (deferred by
+## agreement) - this only renders it once boss_cell is set some other
+## way (e.g. a direct DungeonManager.set_boss_cell() call for testing).
+##
+## STAGE 3 DEPENDENCY: Dungeon.gd's movement loop still expects the
+## old linear get_path_waypoints()/get_room_data_at_path_index() API,
+## which no longer exists here. Building/placement works standalone;
+## sending a wave does not, until Dungeon.gd is updated to consume
+## DungeonManager.get_shortest_path() instead.
 ##
 ## Assumes DungeonManager, EconomyManager, and CardHandManager are
 ## autoload singletons.
 
-signal room_selected(index: int, room: Room)
+signal room_selected(cell: Vector2i, room: Room)
 signal room_placed(room_data: RoomData)
 
 @export var room_scene: PackedScene
-@export var room_size: Vector2 = Vector2(500, 500)
-@export var gap_width: float = 20.0
+@export var room_size: Vector2 = Vector2(250, 250)
 
 const MARKER_COLOR: Color = Color(0.15, 0.15, 0.15, 1.0)
+const NO_SELECTION: Vector2i = Vector2i(-1, -1)
 
-var room_nodes: Array[Room] = []
-var gap_zones: Array[RoomGapZone] = []
-var entrance_marker: Node2D
-var exit_marker: Node2D
-
-## The dedicated visual node for DungeonManager.boss_room, or null if
-## the active biome has no boss room set. Never appears in room_nodes.
+var room_nodes: Dictionary = {}  # Vector2i -> Room, player-built rooms only
+var cell_zones: Dictionary = {}  # Vector2i -> RoomGapZone, one per empty in-bounds cell
 var boss_room_node: Room = null
+var entrance_marker: Node2D
 
-## path_index (as used by get_path_waypoints/get_room_data_at_path_index)
-## -> RoomData, rebuilt every _rebuild_layout(). Covers both player
-## rooms and the trailing boss room slot, so callers don't need to
-## know which is which.
-var _room_data_by_path_index: Dictionary = {}
-
-var _selected_index: int = -1
+var _selected_cell: Vector2i = NO_SELECTION
 
 
 func _ready() -> void:
 	DungeonManager.dungeon_generated.connect(_rebuild_layout)
-	DungeonManager.room_inserted.connect(_on_dungeon_changed)
+	DungeonManager.room_placed.connect(_on_dungeon_changed)
 	DungeonManager.room_removed.connect(_on_dungeon_changed)
 	DungeonManager.room_upgraded.connect(_on_dungeon_changed)
+	DungeonManager.boss_cell_changed.connect(_on_dungeon_changed)
 	DungeonManager.boss_room_changed.connect(_on_dungeon_changed)
 
-	_create_markers()
+	_create_entrance_marker()
 	_rebuild_layout()
-	_update_gap_zone_lock_state()
+
 
 func _on_dungeon_changed(_a: Variant = null, _b: Variant = null) -> void:
 	_rebuild_layout()
 
 
-## Consumes a matching card from the player's hand and inserts a room
-## at `index`. Used by RoomGapZone drops. Refuses if the card isn't
-## actually in hand - dragging is only possible from an existing
-## RoomCard in the hand UI, so this should normally always succeed,
-## but it's checked explicitly rather than assumed.
-func request_insert(index: int, room_data: RoomData) -> bool:
+## Consumes a matching card from the player's hand and places a room
+## at `cell`. Used by RoomGapZone drops.
+func request_insert(cell: Vector2i, room_data: RoomData) -> bool:
 
 	if GameManager.current_state != GameEnums.GameState.BUILDING:
-		return false
-
-	if DungeonManager.room_count() >= DungeonManager.max_rooms:
 		return false
 
 	if room_data == null:
@@ -90,31 +74,28 @@ func request_insert(index: int, room_data: RoomData) -> bool:
 	if not CardHandManager.remove_card(room_data):
 		return false
 
-	var inserted: bool = DungeonManager.insert_room(index, room_data)
+	var placed: bool = DungeonManager.place_room(cell, room_data)
 
-	if not inserted:
-		# Give the card back - the insert itself failed for some other
-		# reason (shouldn't normally happen given the checks above, but
-		# this keeps a failed insert from silently burning a card the
-		# player paid for).
+	if not placed:
+		# Give the card back - the placement itself failed for some
+		# other reason (shouldn't normally happen given can_place_at
+		# was already checked by the drop zone, but this keeps a
+		# failed placement from silently burning a paid-for card).
 		CardHandManager.add_card(room_data)
 
-	_update_gap_zone_lock_state()
-
-	if inserted:
+	if placed:
 		room_placed.emit(room_data)
 
-	return inserted
+	return placed
 
-## Spends the cost difference and upgrades the room at `index`. Upgrade
-## cards are NOT part of the hand system - they remain always-available
-## in the palette, gold-charged at the cost delta, same as before.
-func request_upgrade(index: int) -> bool:
+
+## Spends the cost difference and upgrades the room at `cell`.
+func request_upgrade(cell: Vector2i) -> bool:
 
 	if GameManager.current_state != GameEnums.GameState.BUILDING:
 		return false
 
-	var current: RoomData = DungeonManager.get_room(index)
+	var current: RoomData = DungeonManager.get_room(cell)
 
 	if current == null or current.upgrade_path == null:
 		return false
@@ -126,106 +107,66 @@ func request_upgrade(index: int) -> bool:
 			return false
 		EconomyManager.spend_gold(upgrade_cost)
 
-	return DungeonManager.upgrade_room(index)
+	return DungeonManager.upgrade_room(cell)
 
 
-## Removes the room at `index` and refunds half its cost.
-func sell_room_at(index: int) -> bool:
+## Removes the room at `cell` and refunds half its cost.
+func sell_room_at(cell: Vector2i) -> bool:
 
 	if GameManager.current_state != GameEnums.GameState.BUILDING:
 		return false
 
-	var room_data: RoomData = DungeonManager.get_room(index)
+	var room_data: RoomData = DungeonManager.get_room(cell)
 
 	if room_data == null:
 		return false
 
 	var refund: int = int(room_data.cost * 0.5)
-	var removed: bool = DungeonManager.remove_room(index)
+	var removed: bool = DungeonManager.remove_room(cell)
 
 	if removed:
 		EconomyManager.add_gold(refund)
 
-	_update_gap_zone_lock_state()
-
 	return removed
 
 
-## Waypoints for hero movement: entrance, then each player room slot,
-## then the boss room (if any), then exit. Every position is the
-## vertical center of its room, so a hero walking this path stays
-## centered top-to-bottom the whole way through.
-func get_path_waypoints() -> Array[Vector2]:
-
-	var waypoints: Array[Vector2] = []
-
-	waypoints.append(entrance_marker.position)
-
-	for room: Room in room_nodes:
-		waypoints.append(room.position)
-
-	if is_instance_valid(boss_room_node):
-		waypoints.append(boss_room_node.position)
-
-	waypoints.append(exit_marker.position)
-
-	return waypoints
-
-
-## Maps a waypoint index (from get_path_waypoints) back to its RoomData.
-## Index 0 is the entrance and has no room; the last index is the exit.
-## Backed by a lookup table rebuilt every _rebuild_layout(), rather than
-## arithmetic, since the boss room makes the mapping non-uniform.
-func get_room_data_at_path_index(path_index: int) -> RoomData:
-	return _room_data_by_path_index.get(path_index, null)
+## World position for the center of a grid cell.
+func cell_to_position(cell: Vector2i) -> Vector2:
+	return Vector2(cell.x * room_size.x, cell.y * room_size.y)
 
 
 ## Called by a palette/build UI when a matching room card starts dragging.
 func show_upgrade_prompts_for(dragged_room_data: RoomData) -> void:
 
-	for i: int in room_nodes.size():
+	for cell: Vector2i in room_nodes:
 
-		var current: RoomData = DungeonManager.get_room(i)
+		var current: RoomData = DungeonManager.get_room(cell)
 
 		if current != null and current.upgrade_path == dragged_room_data:
-			room_nodes[i].show_upgrade_prompt(i)
+			room_nodes[cell].show_upgrade_prompt(cell)
 
 
 func hide_upgrade_prompts() -> void:
 
-	for room: Room in room_nodes:
-		room.hide_upgrade_prompt()
+	for cell: Vector2i in room_nodes:
+		room_nodes[cell].hide_upgrade_prompt()
 
 
-## Slot 0 is the entrance, 1..room_count are rooms, room_count + 1 is the
-## exit. Rooms sit edge-to-edge because each is `room_size.x` wide and
-## its own origin is its center, so this is simply `slot * room_size.x`.
-func _slot_center_x(slot: int) -> float:
-	return slot * room_size.x
+func _create_entrance_marker() -> void:
 
-
-func _create_markers() -> void:
-	entrance_marker = _build_marker("Entrance")
+	entrance_marker = Node2D.new()
+	entrance_marker.name = "Entrance"
 	add_child(entrance_marker)
-
-	exit_marker = _build_marker("Exit")
-	add_child(exit_marker)
-
-
-func _build_marker(label_text: String) -> Node2D:
-
-	var marker: Node2D = Node2D.new()
-	marker.name = label_text
 
 	var backdrop: ColorRect = ColorRect.new()
 	backdrop.color = MARKER_COLOR
 	backdrop.position = room_size * -0.5
 	backdrop.size = room_size
 	backdrop.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	marker.add_child(backdrop)
+	entrance_marker.add_child(backdrop)
 
 	var label: Label = Label.new()
-	label.text = label_text
+	label.text = "Entrance"
 	label.anchor_left = 0.5
 	label.anchor_right = 0.5
 	label.anchor_top = 0.5
@@ -236,149 +177,145 @@ func _build_marker(label_text: String) -> Node2D:
 	label.offset_bottom = 12.0
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	marker.add_child(label)
-
-	return marker
+	entrance_marker.add_child(label)
 
 
 func _rebuild_layout() -> void:
 
 	_clear_layout()
 
-	var room_count: int = DungeonManager.room_count()
+	entrance_marker.position = cell_to_position(DungeonManager.entrance_cell)
 
-	entrance_marker.position = Vector2(_slot_center_x(0), 0.0)
-	_add_gap_zone(0)
+	for x: int in DungeonManager.grid_size.x:
+		for y: int in DungeonManager.grid_size.y:
 
-	for i: int in room_count:
+			var cell: Vector2i = Vector2i(x, y)
 
-		var room_data: RoomData = DungeonManager.get_room(i)
+			if cell == DungeonManager.entrance_cell or cell == DungeonManager.boss_cell:
+				continue
 
-		var room: Room = room_scene.instantiate() as Room
-		add_child(room)
-		room.position = Vector2(_slot_center_x(i + 1), 0.0)
-		room.set_room(room_data)
-		room.room_clicked.connect(_on_room_clicked)
-		room.sell_requested.connect(_on_sell_requested)
-		room.upgrade_zone.upgrade_requested.connect(_on_upgrade_requested)
+			var room_data: RoomData = DungeonManager.get_room(cell)
 
-		room_nodes.append(room)
-		_room_data_by_path_index[i + 1] = room_data
+			if room_data != null:
+				_spawn_room_node(cell, room_data)
+			else:
+				_spawn_cell_zone(cell)
 
-		_add_gap_zone(i + 1)
-
-	var trailing_slot: int = room_count + 1
-
-	if DungeonManager.boss_room != null:
+	if DungeonManager.boss_cell != DungeonManager.UNPLACED_CELL and DungeonManager.boss_room != null:
 
 		boss_room_node = room_scene.instantiate() as Room
 		add_child(boss_room_node)
-		boss_room_node.position = Vector2(_slot_center_x(trailing_slot), 0.0)
+		boss_room_node.position = cell_to_position(DungeonManager.boss_cell)
 		boss_room_node.set_room(DungeonManager.boss_room)
 		# Deliberately NOT connected to room_clicked / sell_requested /
 		# upgrade_zone - the boss room can't be selected, sold, or
-		# upgraded, it's fixed for the whole run.
-
-		_room_data_by_path_index[trailing_slot] = DungeonManager.boss_room
-
-		trailing_slot += 1
-
-	exit_marker.position = Vector2(_slot_center_x(trailing_slot), 0.0)
+		# upgraded through the normal room UI.
+		_apply_doors(boss_room_node, DungeonManager.boss_cell)
 
 
-func _add_gap_zone(insert_index: int) -> void:
+func _spawn_room_node(cell: Vector2i, room_data: RoomData) -> void:
+
+	var room: Room = room_scene.instantiate() as Room
+	add_child(room)
+	room.position = cell_to_position(cell)
+	room.set_room(room_data)
+	room.room_clicked.connect(_on_room_clicked.bind(cell))
+	room.sell_requested.connect(_on_sell_requested.bind(cell))
+	room.upgrade_zone.upgrade_requested.connect(_on_upgrade_requested)
+
+	room_nodes[cell] = room
+	_apply_doors(room, cell)
+
+
+func _spawn_cell_zone(cell: Vector2i) -> void:
 
 	var zone: RoomGapZone = RoomGapZone.new()
-	zone.gap_index = insert_index
-	zone.z_index = 1 # always draw above rooms, regardless of sibling order
-
-	var seam_x: float = (_slot_center_x(insert_index) + _slot_center_x(insert_index + 1)) * 0.5
-
-	zone.size = Vector2(gap_width, room_size.y)
-	zone.position = Vector2(seam_x - gap_width * 0.5, room_size.y * -0.5)
-	zone.drop_requested.connect(_on_gap_drop_requested)
+	zone.cell = cell
+	zone.z_index = 1
+	zone.size = room_size
+	zone.position = cell_to_position(cell) - room_size * 0.5
+	zone.drop_requested.connect(_on_cell_drop_requested)
 
 	add_child(zone)
-	gap_zones.append(zone)
+	cell_zones[cell] = zone
 
 
-func _on_gap_drop_requested(gap_index: int, room_data: RoomData) -> void:
-	request_insert(gap_index, room_data)
+## Sets a room's 4 doorway markers based on DungeonManager's actual
+## connection graph - NOT raw grid adjacency. Two grid-adjacent rooms
+## don't necessarily have a door between them (see
+## DungeonManager.has_connection / the MAX_ROOM_CONNECTIONS cap).
+func _apply_doors(room: Room, cell: Vector2i) -> void:
+
+	var open_edges: Dictionary = {
+		"north": DungeonManager.has_connection(cell, cell + Vector2i(0, -1)),
+		"east": DungeonManager.has_connection(cell, cell + Vector2i(1, 0)),
+		"south": DungeonManager.has_connection(cell, cell + Vector2i(0, 1)),
+		"west": DungeonManager.has_connection(cell, cell + Vector2i(-1, 0)),
+	}
+
+	room.set_open_doors(open_edges)
 
 
-func _on_upgrade_requested(room_index: int) -> void:
-	request_upgrade(room_index)
+func _on_cell_drop_requested(cell: Vector2i, room_data: RoomData) -> void:
+	if room_data == DungeonManager.boss_room:
+		DungeonManager.set_boss_cell(cell)
+	else:
+		request_insert(cell, room_data)
+
+
+func _on_upgrade_requested(cell: Vector2i) -> void:
+	request_upgrade(cell)
 	hide_upgrade_prompts()
 
 
-func _on_room_clicked(room: Room) -> void:
+func _on_room_clicked(room: Room, cell: Vector2i) -> void:
 
-	var index: int = room_nodes.find(room)
-
-	if index == -1:
-		return
-
-	if _selected_index == index:
+	if _selected_cell == cell:
 		_deselect_room()
 	else:
-		_select_room(index)
+		_select_room(cell)
 
-	room_selected.emit(index, room)
+	room_selected.emit(cell, room)
 
 
-func _select_room(index: int) -> void:
+func _select_room(cell: Vector2i) -> void:
 
 	_deselect_room()
 
-	_selected_index = index
-	room_nodes[index].show_sell_button()
+	_selected_cell = cell
+
+	if room_nodes.has(cell):
+		room_nodes[cell].show_sell_button()
 
 
 func _deselect_room() -> void:
 
-	if _selected_index != -1 and _selected_index < room_nodes.size():
-		room_nodes[_selected_index].hide_sell_button()
+	if _selected_cell != NO_SELECTION and room_nodes.has(_selected_cell):
+		room_nodes[_selected_cell].hide_sell_button()
 
-	_selected_index = -1
+	_selected_cell = NO_SELECTION
 
 
-func _on_sell_requested(room: Room) -> void:
+func _on_sell_requested(room: Room, cell: Vector2i) -> void:
+	sell_room_at(cell)
 
-	var index: int = room_nodes.find(room)
-
-	if index != -1:
-		sell_room_at(index)
-
-## Locks/unlocks every gap zone based on whether the dungeon is
-## currently at its room cap. Called once in _ready() and again after
-## any successful insert or sell, since either can cross the cap. The
-## boss room is intentionally excluded from this check - it never
-## counts against max_rooms.
-func _update_gap_zone_lock_state() -> void:
-
-	var at_cap: bool = DungeonManager.room_count() >= DungeonManager.max_rooms
-
-	for zone: RoomGapZone in gap_zones:
-		zone.set_locked(at_cap)
 
 func _clear_layout() -> void:
 
-	for room: Room in room_nodes:
+	for cell: Vector2i in room_nodes:
+		var room: Room = room_nodes[cell]
 		if is_instance_valid(room):
 			room.queue_free()
-
 	room_nodes.clear()
 
 	if is_instance_valid(boss_room_node):
 		boss_room_node.queue_free()
 	boss_room_node = null
 
-	_room_data_by_path_index.clear()
-
-	for zone: RoomGapZone in gap_zones:
+	for cell: Vector2i in cell_zones:
+		var zone: RoomGapZone = cell_zones[cell]
 		if is_instance_valid(zone):
 			zone.queue_free()
+	cell_zones.clear()
 
-	gap_zones.clear()
-
-	_selected_index = -1
+	_selected_cell = NO_SELECTION

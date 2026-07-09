@@ -1,9 +1,24 @@
 extends Control
 class_name RoomGapZone
 
-signal drop_requested(gap_index: int, room_data: RoomData)
+## Represents one EMPTY grid cell as a card-drop target. Visible only
+## while a RoomCard is being dragged, and only accepts a drop if the
+## dragged RoomData could actually go here right now - checked fresh
+## at drag-start and at drop, rather than cached, so the valid-cell
+## set stays correct as the player builds mid-drag-sequence.
+##
+## BOSS ROOM AWARE: the boss room is presented to the player as an
+## always-available RoomCard too (see TestHarness - it's never
+## consumed/removed, just re-drag it to relocate). It's identified by
+## REFERENCE - if the dragged RoomData IS DungeonManager.boss_room,
+## this routes through can_place_boss_at()/DungeonManager.set_boss_cell()
+## instead of the normal can_place_at()/place_room() path. Everything
+## else about the drag interaction (highlighting, drop handling) is
+## identical either way.
 
-@export var gap_index: int = -1
+signal drop_requested(cell: Vector2i, room_data: RoomData)
+
+@export var cell: Vector2i = Vector2i(-1, -1)
 
 const IDLE_COLOR: Color = Color(1, 1, 1, 0.06)
 const HOVER_COLOR: Color = Color(0.35, 1.0, 0.45, 0.4)
@@ -12,12 +27,6 @@ const HOVER_PLUS_ALPHA: float = 1.0
 
 var _highlight: ColorRect
 var _plus_label: Label
-
-## When true, this gap zone is at the dungeon's room cap - it never
-## shows itself during a drag and never accepts a drop, regardless of
-## what's being dragged. Set by DungeonGrid whenever the room count
-## changes (see DungeonGrid._update_gap_zone_lock_state).
-var locked: bool = false
 
 
 func _ready() -> void:
@@ -50,36 +59,35 @@ func _ready() -> void:
 	add_child(_plus_label)
 
 
-## Called by DungeonGrid whenever the room count crosses the cap in
-## either direction. Locking forcibly hides the zone even mid-drag.
-func set_locked(value: bool) -> void:
-	locked = value
-	if locked:
-		visible = false
-		_set_hovered(false)
+## True if `data` could actually be dropped on this cell right now -
+## the boss room via can_place_boss_at, any other RoomData via the
+## normal can_place_at.
+func _accepts(data: Variant) -> bool:
+
+	if not (data is RoomData):
+		return false
+
+	if data == DungeonManager.boss_room:
+		return DungeonManager.can_place_boss_at(cell)
+
+	return DungeonManager.can_place_at(cell)
 
 
 func _can_drop_data(_at_position: Vector2, data: Variant) -> bool:
-	if locked:
-		return false
-	var can_drop: bool = data is RoomData
+	var can_drop: bool = _accepts(data)
 	_set_hovered(can_drop)
 	return can_drop
 
 
 func _drop_data(_at_position: Vector2, data: Variant) -> void:
-	if locked:
-		return
 	_set_hovered(false)
-	if data is RoomData:
-		drop_requested.emit(gap_index, data)
+	if _accepts(data):
+		drop_requested.emit(cell, data)
 
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_DRAG_BEGIN:
-		if locked:
-			return
-		visible = get_viewport().gui_get_drag_data() is RoomData
+		visible = _accepts(get_viewport().gui_get_drag_data())
 	elif what == NOTIFICATION_DRAG_END:
 		visible = false
 		_set_hovered(false)

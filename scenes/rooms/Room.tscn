@@ -25,8 +25,8 @@ offset_left = -60.0
 offset_top = -78.0
 offset_right = 60.0
 offset_bottom = -55.0
-horizontal_alignment = 1
 theme_override_colors/font_color = Color(0.85, 0.25, 0.25, 1)
+horizontal_alignment = 1
 
 [node name="Button" type="Button" parent="." unique_id=1213088818]
 offset_left = -105.0
@@ -50,5 +50,41 @@ offset_top = -195.0
 offset_right = 92.0
 offset_bottom = -145.0
 text = "Sell"
+
+[node name="DoorNorth" type="ColorRect" parent="." unique_id=757457528]
+visible = false
+offset_left = -30.0
+offset_top = -135.0
+offset_right = 30.0
+offset_bottom = -122.0
+mouse_filter = 2
+color = Color(0.9, 0.75, 0.3, 1)
+
+[node name="DoorEast" type="ColorRect" parent="." unique_id=1948089784]
+visible = false
+offset_left = 122.0
+offset_top = -30.0
+offset_right = 135.0
+offset_bottom = 30.0
+mouse_filter = 2
+color = Color(0.9, 0.75, 0.3, 1)
+
+[node name="DoorSouth" type="ColorRect" parent="." unique_id=1501990519]
+visible = false
+offset_left = -30.0
+offset_top = 122.0
+offset_right = 30.0
+offset_bottom = 135.0
+mouse_filter = 2
+color = Color(0.9, 0.75, 0.3, 1)
+
+[node name="DoorWest" type="ColorRect" parent="." unique_id=1195145989]
+visible = false
+offset_left = -135.0
+offset_top = -30.0
+offset_right = -122.0
+offset_bottom = 30.0
+mouse_filter = 2
+color = Color(0.9, 0.75, 0.3, 1)
 
 [connection signal="pressed" from="Button" to="." method="_on_button_pressed"]

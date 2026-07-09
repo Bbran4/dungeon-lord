@@ -3,15 +3,12 @@ class_name RoomUpgradeZone
 
 ## Floating prompt shown above a room while a matching RoomCard is being
 ## dragged. Dropping the card here (or clicking it directly) upgrades the
-## room at `room_index` - but only if the dragged card is the room's
-## actual next upgrade tier, not just any card sharing the same name.
-## This matters once a room has more than one upgrade tier: dragging the
-## base-tier card onto an already-upgraded room must not silently trigger
-## a further upgrade it wasn't meant to cause.
+## room at `cell` - but only if the dragged card is the room's actual
+## next upgrade tier, not just any card sharing the same name.
 
-signal upgrade_requested(room_index: int)
+signal upgrade_requested(cell: Vector2i)
 
-@export var room_index: int = -1
+@export var cell: Vector2i = Vector2i(-1, -1)
 
 
 func _ready() -> void:
@@ -20,7 +17,7 @@ func _ready() -> void:
 
 
 func _on_pressed() -> void:
-	upgrade_requested.emit(room_index)
+	upgrade_requested.emit(cell)
 
 
 func _can_drop_data(_at_position: Vector2, data: Variant) -> bool:
@@ -29,9 +26,9 @@ func _can_drop_data(_at_position: Vector2, data: Variant) -> bool:
 
 func _drop_data(_at_position: Vector2, data: Variant) -> void:
 	if data is RoomData and _is_expected_upgrade(data):
-		upgrade_requested.emit(room_index)
+		upgrade_requested.emit(cell)
 
 
 func _is_expected_upgrade(data: RoomData) -> bool:
-	var current: RoomData = DungeonManager.get_room(room_index)
+	var current: RoomData = DungeonManager.get_room(cell)
 	return current != null and current.upgrade_path == data
