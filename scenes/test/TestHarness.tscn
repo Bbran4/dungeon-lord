@@ -2,6 +2,7 @@
 
 [ext_resource type="Script" uid="uid://frro8y1t7glr" path="res://scripts/test/TestHarness.gd" id="1"]
 [ext_resource type="PackedScene" uid="uid://ceru4x7efje2x" path="res://scenes/dungeons/Dungeon.tscn" id="2"]
+[ext_resource type="Resource" uid="uid://du0iwfwtw2drv" path="res://resources/biomes/crypt_biome.tres" id="2_8sut0"]
 [ext_resource type="Resource" uid="uid://dibvn0i5wkrme" path="res://resources/rooms/skeleton_den.tres" id="2_enmk8"]
 [ext_resource type="Resource" uid="uid://1j0s1fkvp41p" path="res://resources/rooms/skeleton_den_upgraded.tres" id="3_igh42"]
 [ext_resource type="Script" uid="uid://b713taiioqa23" path="res://scripts/core/PanZoomCamera.gd" id="3_senuj"]
@@ -20,6 +21,7 @@
 
 [node name="TestHarness" type="Node2D" unique_id=1615119598]
 script = ExtResource("1")
+starting_biome = ExtResource("2_8sut0")
 skeleton_room_data = ExtResource("2_enmk8")
 skeleton_room_upgraded_data = ExtResource("3_igh42")
 skeleton_room_elite_data = ExtResource("4_cun6h")

@@ -1,0 +1,10 @@
+[gd_resource type="Resource" script_class="BossPhaseData" format=3 uid="uid://d68wqpu30n83"]
+
+[ext_resource type="Script" uid="uid://gwfofjo7s5bk" path="res://scripts/abilities/AbilityData.gd" id="1_ajt53"]
+[ext_resource type="Script" uid="uid://cmu3ewejl84ke" path="res://scripts/bosses/BossPhaseData.gd" id="2_03c4l"]
+[ext_resource type="Script" uid="uid://bgar6y0x1htfq" path="res://scripts/monsters/MonsterData.gd" id="3_fh04k"]
+
+[resource]
+script = ExtResource("2_03c4l")
+phase_name = "Phase 0"
+metadata/_custom_type_script = "uid://cmu3ewejl84ke"

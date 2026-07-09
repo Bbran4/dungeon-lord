@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="BiomeData" format=3 uid="uid://du0iwfwtw2drv"]
+
+[ext_resource type="Resource" uid="uid://ds8epb4lq22ex" path="res://resources/bosses/bone_lord.tres" id="1_g3ji5"]
+[ext_resource type="Script" uid="uid://cjwm4rv0y2emj" path="res://scripts/heroes/HeroData.gd" id="1_u5ny0"]
+[ext_resource type="Script" uid="uid://dx42j73ykak67" path="res://scripts/rooms/RoomData.gd" id="2_g3ji5"]
+[ext_resource type="Script" uid="uid://b42es04hl35yt" path="res://scripts/biomes/BiomeData.gd" id="3_artfq"]
+
+[resource]
+script = ExtResource("3_artfq")
+biome_name = "Crypt"
+boss = ExtResource("1_g3ji5")
+metadata/_custom_type_script = "uid://b42es04hl35yt"

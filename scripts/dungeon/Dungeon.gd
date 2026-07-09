@@ -83,6 +83,8 @@ class_name Dungeon
 signal hero_escaped(hero: CombatEntity)
 signal trap_triggered(hero: CombatEntity, trap_data: TrapData)
 signal wave_cleared(full_wipe: bool)
+signal boss_encounter_started(boss_data: BossData)
+signal boss_phase_reached(boss_data: BossData, phase_index: int, announcement: String)
 
 @onready var dungeon_grid: DungeonGrid = $DungeonGrid
 
@@ -290,6 +292,12 @@ func _run_party() -> void:
 			if _living_party_entities().is_empty():
 				_finish_wave()
 				return
+
+	if _is_boss_wave():
+		await _run_boss_encounter()
+		if _living_party_entities().is_empty():
+			_finish_wave()
+			return
 
 	_resolve_escaped_party()
 
@@ -628,3 +636,88 @@ func _clear_remaining_room_monsters() -> void:
 				monster.queue_free()
 
 	_room_monsters.clear()
+
+## True only on the biome's climax wave - the one that would trigger
+## GameManager.start_victory() on a full wipe. WaveManager.current_wave
+## counts full wipes already survived, so the wave about to be
+## attempted is current_wave + 1.
+func _is_boss_wave() -> bool:
+	return WaveManager.current_wave + 1 >= WaveManager.max_wave
+
+
+## Called from _run_party() after the party has survived every built
+## room, only on the boss wave, only if the active biome has a boss
+## configured. This is what makes the boss "automatically start in the
+## dungeon based on the biome" rather than something the player places.
+func _run_boss_encounter() -> void:
+
+	var boss_data: BossData = BiomeManager.get_current_boss()
+
+	if boss_data == null or boss_data.phases.is_empty():
+		return
+
+	var waypoints: Array[Vector2] = dungeon_grid.get_path_waypoints()
+	var boss_position: Vector2 = waypoints[waypoints.size() - 1]
+
+	var boss: CombatEntity = monster_scene.instantiate() as CombatEntity
+	boss.name = "Boss_%s" % boss_data.boss_name
+	add_child(boss)
+
+	boss.configure(boss_data.max_health, boss_data.damage, boss_data.armor, boss_data.attack_speed, boss_data.phases[0].abilities)
+	boss.is_melee = boss_data.is_melee
+	boss.projectile_color = boss_data.projectile_color
+	boss.position = boss_position + Vector2(-60, 0)
+
+	if boss.has_node("Body/Label"):
+		boss.get_node("Body/Label").text = boss_data.boss_name
+
+	var boss_group: Array[CombatEntity] = [boss]
+
+	for monster_data: MonsterData in boss_data.starting_escort:
+		boss_group.append(_spawn_escort_monster(monster_data, boss_position))
+
+	var summon_handler: Callable = func(phase: BossPhaseData, source_boss: CombatEntity, group: Array[CombatEntity]) -> void:
+		if source_boss != boss:
+			return
+		for monster_data: MonsterData in phase.summons:
+			group.append(_spawn_escort_monster(monster_data, boss_position))
+
+	var phase_log_handler: Callable = func(source_boss: CombatEntity, source_boss_data: BossData, phase_index: int) -> void:
+		if source_boss != boss:
+			return
+		boss_phase_reached.emit(source_boss_data, phase_index, source_boss_data.phases[phase_index].announcement)
+
+	CombatManager.boss_phase_summon_requested.connect(summon_handler)
+	CombatManager.boss_phase_changed.connect(phase_log_handler)
+
+	boss_encounter_started.emit(boss_data)
+
+	_charge_melee_into_combat(boss_group, boss_position)
+
+	await CombatManager.begin_boss_combat(_living_party_entities(), boss, boss_data, boss_group)
+
+	CombatManager.boss_phase_summon_requested.disconnect(summon_handler)
+	CombatManager.boss_phase_changed.disconnect(phase_log_handler)
+
+	for entity: CombatEntity in boss_group:
+		if is_instance_valid(entity):
+			entity.queue_free()
+
+	_resolve_dead_party_members()
+
+
+func _spawn_escort_monster(monster_data: MonsterData, at_position: Vector2) -> CombatEntity:
+
+	var monster: CombatEntity = monster_scene.instantiate() as CombatEntity
+	monster.name = "Monster_%s" % monster_data.monster_name
+	add_child(monster)
+
+	monster.configure(monster_data.max_health, monster_data.damage, monster_data.armor, monster_data.attack_speed, monster_data.abilities)
+	monster.is_melee = monster_data.is_melee
+	monster.projectile_color = monster_data.projectile_color
+	monster.position = at_position + Vector2(randf_range(-40.0, 40.0), randf_range(-60.0, 60.0))
+
+	if monster.has_node("Body/Label"):
+		monster.get_node("Body/Label").text = monster_data.monster_name
+
+	return monster

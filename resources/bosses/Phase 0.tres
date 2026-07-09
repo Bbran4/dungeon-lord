@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="BossPhaseData" format=3 uid="uid://bewtqmronpfds"]
+
+[ext_resource type="Script" uid="uid://gwfofjo7s5bk" path="res://scripts/abilities/AbilityData.gd" id="1_qmmwm"]
+[ext_resource type="Script" uid="uid://cmu3ewejl84ke" path="res://scripts/bosses/BossPhaseData.gd" id="2_1lvuc"]
+[ext_resource type="Resource" uid="uid://cxupk3w4rcdi6" path="res://resources/ablilities/ranger_explosive_arrow.tres" id="2_ncig4"]
+[ext_resource type="Script" uid="uid://bgar6y0x1htfq" path="res://scripts/monsters/MonsterData.gd" id="3_ncig4"]
+[ext_resource type="Resource" uid="uid://bj8hfxp15sm5h" path="res://resources/monsters/skeleton.tres" id="5_rm6hw"]
+
+[resource]
+script = ExtResource("2_1lvuc")
+phase_name = "Phase 1"
+health_threshold = 0.5
+abilities = Array[ExtResource("1_qmmwm")]([ExtResource("2_ncig4")])
+summons = Array[ExtResource("3_ncig4")]([ExtResource("5_rm6hw")])
+metadata/_custom_type_script = "uid://cmu3ewejl84ke"

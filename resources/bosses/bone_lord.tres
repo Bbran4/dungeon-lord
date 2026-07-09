@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="BossData" format=3 uid="uid://ds8epb4lq22ex"]
+
+[ext_resource type="Script" uid="uid://cmu3ewejl84ke" path="res://scripts/bosses/BossPhaseData.gd" id="1_bpj4b"]
+[ext_resource type="Script" uid="uid://cqh58fel6y456" path="res://scripts/bosses/BossData.gd" id="2_flks2"]
+[ext_resource type="Script" uid="uid://bgar6y0x1htfq" path="res://scripts/monsters/MonsterData.gd" id="3_5rdra"]
+
+[resource]
+script = ExtResource("2_flks2")
+boss_name = "The Bone Lord"
+max_health = 220
+damage = 14
+metadata/_custom_type_script = "uid://cqh58fel6y456"

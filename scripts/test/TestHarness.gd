@@ -40,7 +40,7 @@ class_name TestHarness
 ## Assumes these are autoload singletons (Project Settings -> Autoload):
 ## GameManager, EconomyManager, DungeonManager, WaveManager, CombatManager,
 ## HeroManager, PassiveManager, ShopManager, CardHandManager
-
+@export var starting_biome : BiomeData
 @onready var dungeon: Dungeon = $Dungeon
 @onready var dungeon_grid: DungeonGrid = $Dungeon/DungeonGrid
 @onready var gold_label: Label = $CanvasLayer/UI/VBox/GoldLabel

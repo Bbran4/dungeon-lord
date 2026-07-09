@@ -41,6 +41,8 @@ extends Node
 signal group_combat_started(heroes: Array[CombatEntity], monsters: Array[CombatEntity])
 signal group_combat_finished(heroes_won: bool)
 signal ability_used(message: String)
+signal boss_phase_changed(boss: CombatEntity, boss_data: BossData, phase_index: int)
+signal boss_phase_summon_requested(phase: BossPhaseData, boss: CombatEntity, monster_group: Array[CombatEntity])
 
 ## Simulation clock granularity, not a stat - each combatant's own
 ## ability cooldowns still determine how often THEY personally act.
@@ -568,3 +570,91 @@ func _revert_all_taunts(active_taunts: Dictionary) -> void:
 			hero.set_taunting(false)
 
 	active_taunts.clear()
+
+## Boss variant of begin_group_combat(). Same tick loop and the same
+## private helpers (_tick_actor, _perform_opening_actions, threat/
+## taunt/buff bookkeeping), plus a phase check each tick.
+##
+## monster_group must be passed in pre-populated with just the boss
+## (e.g. [boss]) - it's a live reference, so summons appended to it
+## mid-fight (via boss_phase_summon_requested) are picked up by the
+## very next tick automatically. The caller (Dungeon._run_boss_encounter)
+## owns spawning/freeing every entity that ends up in it.
+func begin_boss_combat(heroes: Array[CombatEntity], boss: CombatEntity, boss_data: BossData, monster_group: Array[CombatEntity]) -> void:
+
+	group_combat_started.emit(heroes, monster_group)
+
+	var cooldowns: Dictionary = {}
+	var threat_table: Dictionary = {}
+	var active_taunts: Dictionary = {}
+	var active_buffs: Array = []
+	var elapsed_time: float = 0.0
+
+	for hero: CombatEntity in heroes:
+		cooldowns[hero] = {}
+
+	for monster: CombatEntity in monster_group:
+		cooldowns[monster] = {}
+		threat_table[monster] = {}
+
+	# Phase 0 is already active (configured by the caller before this
+	# is called) - start scanning from phase 1.
+	var next_phase_index: int = 1
+
+	_perform_opening_actions(heroes, cooldowns, active_taunts, active_buffs, elapsed_time)
+	_perform_opening_actions(monster_group, cooldowns, active_taunts, active_buffs, elapsed_time)
+
+	while _has_living(heroes) and _has_living(monster_group):
+
+		await get_tree().create_timer(TICK_INTERVAL).timeout
+		elapsed_time += TICK_INTERVAL
+
+		_expire_buffs(active_buffs, elapsed_time)
+		_expire_taunts(active_taunts, elapsed_time)
+
+		next_phase_index = _check_boss_phase_transition(boss, boss_data, next_phase_index, monster_group, cooldowns, threat_table)
+
+		for hero: CombatEntity in heroes:
+			if is_instance_valid(hero):
+				_tick_actor(hero, heroes, monster_group, cooldowns, threat_table, active_taunts, active_buffs, elapsed_time, false)
+
+		for monster: CombatEntity in monster_group:
+			if is_instance_valid(monster):
+				_tick_actor(monster, monster_group, heroes, cooldowns, threat_table, active_taunts, active_buffs, elapsed_time, true)
+
+	_revert_all_buffs(active_buffs)
+	_revert_all_taunts(active_taunts)
+
+	group_combat_finished.emit(_has_living(heroes))
+
+
+## Fires each phase at most once, in array order. Returns the index of
+## the next phase still to check, so already-triggered phases aren't
+## re-scanned every tick.
+func _check_boss_phase_transition(boss: CombatEntity, boss_data: BossData, next_phase_index: int, monster_group: Array[CombatEntity], cooldowns: Dictionary, threat_table: Dictionary) -> int:
+
+	if not is_instance_valid(boss) or boss.current_health <= 0:
+		return next_phase_index
+
+	if next_phase_index >= boss_data.phases.size():
+		return next_phase_index
+
+	var phase: BossPhaseData = boss_data.phases[next_phase_index]
+	var health_ratio: float = float(boss.current_health) / float(boss.max_health)
+
+	if health_ratio > phase.health_threshold:
+		return next_phase_index
+
+	boss.abilities = phase.abilities
+
+	boss_phase_changed.emit(boss, boss_data, next_phase_index)
+	ability_used.emit("%s: %s" % [_describe(boss), phase.announcement if phase.announcement != "" else "enters a new phase!"])
+
+	if not phase.summons.is_empty():
+		boss_phase_summon_requested.emit(phase, boss, monster_group)
+		for monster: CombatEntity in monster_group:
+			if is_instance_valid(monster) and not cooldowns.has(monster):
+				cooldowns[monster] = {}
+				threat_table[monster] = {}
+
+	return next_phase_index + 1
