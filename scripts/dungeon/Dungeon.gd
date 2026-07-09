@@ -649,6 +649,8 @@ func _clear_remaining_room_monsters() -> void:
 ## as any other room's monsters.
 func _fight_boss_room(room_data: RoomData, boss_position: Vector2) -> void:
 
+	print("_fight_boss_room called, boss_data=", room_data.boss, " phases=", room_data.boss.phases.size() if room_data.boss else -1)
+
 	var boss_data: BossData = room_data.boss
 
 	if boss_data == null or boss_data.phases.is_empty():

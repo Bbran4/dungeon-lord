@@ -1,12 +1,15 @@
 [gd_resource type="Resource" script_class="BossData" format=3 uid="uid://ds8epb4lq22ex"]
 
 [ext_resource type="Script" uid="uid://cmu3ewejl84ke" path="res://scripts/bosses/BossPhaseData.gd" id="1_bpj4b"]
+[ext_resource type="Resource" uid="uid://bewtqmronpfds" path="res://resources/bosses/Phase 0.tres" id="2_5rdra"]
 [ext_resource type="Script" uid="uid://cqh58fel6y456" path="res://scripts/bosses/BossData.gd" id="2_flks2"]
 [ext_resource type="Script" uid="uid://bgar6y0x1htfq" path="res://scripts/monsters/MonsterData.gd" id="3_5rdra"]
+[ext_resource type="Resource" uid="uid://d68wqpu30n83" path="res://resources/bosses/Phase 1.tres" id="3_xk5ai"]
 
 [resource]
 script = ExtResource("2_flks2")
 boss_name = "The Bone Lord"
 max_health = 220
 damage = 14
+phases = Array[ExtResource("1_bpj4b")]([ExtResource("2_5rdra"), ExtResource("3_xk5ai")])
 metadata/_custom_type_script = "uid://cqh58fel6y456"
