@@ -416,6 +416,14 @@ Notably **not yet wired up**, despite the underlying scripts existing:
 
 # 🔥 DEVELOPMENT PRIORITY
 
+The order below changed from earlier drafts of this document. Biomes and
+Meta Progression are pure content-scaling — more regions, more unlocks —
+and they're only worth building once there's a dungeon worth scaling.
+The systems that actually deliver on the "outsmart the heroes" pillars
+(intelligent expeditions, reputation, interacting rooms) are pulled
+forward ahead of them, right after the two milestones already in
+progress.
+
 1. ✅ Dungeon Grid *(implemented as a linear path, capped at 6 rooms)*
 2. ✅ Placeable Rooms
 3. ✅ Hero Movement
@@ -425,40 +433,29 @@ Notably **not yet wired up**, despite the underlying scripts existing:
 7. ✅ Wave System *(outcome-driven tier, 10-wave victory condition)*
 8. 🟡 Card Drafting *(rooms/traps are real cards in a real hand; still missing a forced single-choice draft and ability-modifier cards)*
 9. 🟡 Hero Parties *(class formation, aggro/taunt, full kits done; no targeting AI yet)*
-10. ⬜ Boss Room
-11. ⬜ Biomes
-12. ⬜ Meta Progression
-13. ⬜ Hero Personalities & Reputation *(the "outsmart the heroes" layer — see The Bigger Vision)*
-14. ⬜ Room Families & Resource Interactions
+10. ⬜ Hero Expeditions & Reputation *(the core "outsmart the heroes" differentiator — makes heroes intelligent adversaries instead of moving HP bars)*
+11. ⬜ Room Families & Living Dungeon *(the "everything interacts" pillar — rooms combo instead of just stacking stats)*
+12. ⬜ Boss Encounters *(now includes boss-as-character beats from The Bigger Vision, not just a stat-check fight)*
+13. ⬜ Biomes
+14. ⬜ Meta Progression
 
 ---
 
 # 🗺️ DEVELOPMENT ROADMAP
 
-The project follows a vertical slice approach, completing one fully playable layer before expanding.
+The project follows a vertical slice approach, completing one fully playable layer before expanding. Milestones 5–7 were reordered ahead of Biomes and Meta Progression so the roadmap builds toward the core vision (outsmarting intelligent heroes) before it builds toward *more content* to outsmart them with.
 
 ---
 
 ## ✅ MILESTONE 1 — Playable Dungeon Prototype (COMPLETE)
 
-* ✅ Dungeon grid (linear path)
-* ✅ Placeable rooms
-* ✅ Skeleton room
-* ✅ Hero movement
-* ✅ Basic combat
-* ✅ Hero death
-* ✅ Victory/Defeat
-* ✅ Gold rewards
+* ✅ Dungeon grid (linear path) · ✅ Placeable rooms · ✅ Skeleton room · ✅ Hero movement · ✅ Basic combat · ✅ Hero death · ✅ Victory/Defeat · ✅ Gold rewards
 
 ---
 
 ## ✅ MILESTONE 2 — Dungeon Progression (COMPLETE)
 
-* ✅ Multiple room types (trap + utility)
-* ✅ Room upgrades (multi-tier chains)
-* 🟡 Economy balancing (real levers exist; no tuning pass yet)
-* ✅ Dungeon expansion, capped at 6 rooms
-* ✅ Multiple waves (outcome-driven tiers, 10-wave victory)
+* ✅ Multiple room types (trap + utility) · ✅ Room upgrades (multi-tier chains) · 🟡 Economy balancing (real levers exist; no tuning pass yet) · ✅ Dungeon expansion, capped at 6 rooms · ✅ Multiple waves (outcome-driven tiers, 10-wave victory)
 
 *(Called complete per project decision — real room/trap/utility variety, full class kits, outcome-driven scaling, and a post-wave shop with passives together clear the original bar. Success criteria stay 🟡 in the spirit of staying honest about remaining build-variety and tuning work.)*
 
@@ -469,72 +466,98 @@ The project follows a vertical slice approach, completing one fully playable lay
 * ✅ Card rewards (shop purchase / pack win → hand)
 * ⬜ Draft system (currently a shop, not a forced single pick)
 * ✅ Card rarities (real enum, drives border color)
-* ⬜ Synergies
+* ⬜ Synergies *(will mature once Milestone 6's room families and resource chains exist — a real synergy needs something to synergize with)*
 * 🟡 Card packs (functional lucky-dip, not the originally-envisioned drafted pack)
 
 ---
 
 ## 🟡 MILESTONE 4 — Hero Parties (IN PROGRESS)
 
-* ✅ Multiple hero classes
-* 🟡 Party AI (aggro/threat + taunt done, no targeting AI)
-* ✅ Hero abilities (all five kits)
-* ⬜ Elite heroes
-* ⬜ Party compositions
+* ✅ Multiple hero classes · 🟡 Party AI (aggro/threat + taunt done, no targeting AI) · ✅ Hero abilities (all five kits) · ⬜ Elite heroes · ⬜ Party compositions
 
 ---
 
-## 🟢 MILESTONE 5 — Boss Encounters (NOT STARTED)
+## ⚫ MILESTONE 5 — Hero Expeditions & Reputation (NOT STARTED)
 
-* ⬜ Boss room
-* ⬜ Boss AI
-* ⬜ Multiple boss phases
-* ⬜ Boss upgrades
-* ⬜ Raid mechanics
+### Goal
 
----
+Make heroes intelligent adversaries instead of moving HP bars — this is the
+core differentiator of the "outsmart the heroes" vision, so it's built
+before any further content-scaling.
 
-## 🔵 MILESTONE 6 — Biomes (NOT STARTED)
-
-* ⬜ Mountain biome
-* ⬜ Dwarven Mine
-* ⬜ Haunted Crypt
-* ⬜ Additional bosses
-* ⬜ Unique mechanics
-
----
-
-## 🟣 MILESTONE 7 — Meta Progression (NOT STARTED)
-
-* ⬜ Dark Essence
-* ⬜ Unlock system
-* ⬜ New rooms
-* ⬜ New heroes
-* ⬜ New monsters
-* ⬜ New cards
-
----
-
-## ⚫ MILESTONE 8 — Hero Expeditions & Reputation (NOT STARTED)
-
-The "outsmart the heroes" layer from **The Bigger Vision**.
+### Tasks
 
 * ⬜ Per-hero personality traits (Coward, Treasure Hunter, Pyromancer, etc.)
 * ⬜ Expedition objectives beyond "reach the boss"
 * ⬜ Scout report shown before a wave
 * ⬜ Reputation system that shifts future expedition composition based on the player's dominant strategy
 * ⬜ Heroes that "remember" and counter-pick overused strategies
+* ⬜ Evil-choice decision points (capture / sacrifice / corrupt / release) that feed reputation
+
+### Success Criteria
+
+* ⬜ Different heroes require genuinely different dungeon responses
+* ⬜ Leaning on one strategy visibly changes what future expeditions look like
 
 ---
 
-## ⚪ MILESTONE 9 — Room Families & Living Dungeon (NOT STARTED)
+## ⚪ MILESTONE 6 — Room Families & Living Dungeon (NOT STARTED)
+
+### Goal
+
+Make the dungeon itself feel alive and interconnected — the "everything
+interacts" pillar — rather than a rack of independent stat boxes.
+
+### Tasks
 
 * ⬜ Room families (Undead, Beast, Mechanical, Arcane, Infernal)
 * ⬜ Produced/consumed resources (corpses, webs, heat, poison, etc.)
 * ⬜ Room-to-room chain reactions
 * ⬜ Room evolution branches (not just bigger numbers)
-* ⬜ Boss-as-character (reacts, gains traits, joins the final fight)
-* ⬜ Evil-choice decision points (capture / sacrifice / corrupt / release)
+* ⬜ Visible dungeon-state changes over a run (blood, webs, corruption)
+* ⬜ Risk vs. reward rooms (e.g. a Treasure Room that also strengthens heroes who reach it)
+
+### Success Criteria
+
+* ⬜ Rooms combo with each other without needing a hand-authored "synergy" card
+* ⬜ No two 6-room dungeons play identically
+
+---
+
+## 🟢 MILESTONE 7 — Boss Encounters (NOT STARTED)
+
+### Goal
+
+Make the boss room the climax of a biome — and, per The Bigger Vision, a
+character the player forms a relationship with, not just a bigger stat
+check.
+
+### Tasks
+
+* ⬜ Boss room encounter logic
+* ⬜ Boss AI
+* ⬜ Multiple boss phases
+* ⬜ Boss upgrades
+* ⬜ Raid mechanics
+* ⬜ Boss reacts to and comments on what's been built over the run
+* ⬜ Boss gains traits, or joins the final fight, based on run history
+
+### Success Criteria
+
+* ⬜ Boss fights become the climax of each biome
+* ⬜ Players form an actual sense of relationship with their boss across a run
+
+---
+
+## 🔵 MILESTONE 8 — Biomes (NOT STARTED)
+
+* ⬜ Mountain biome · ⬜ Dwarven Mine · ⬜ Haunted Crypt · ⬜ Additional bosses · ⬜ Unique mechanics
+
+---
+
+## 🟣 MILESTONE 9 — Meta Progression (NOT STARTED)
+
+* ⬜ Dark Essence · ⬜ Unlock system · ⬜ New rooms · ⬜ New heroes · ⬜ New monsters · ⬜ New cards · ⬜ Unlocks informed by a run's reputation history
 
 ---
 
